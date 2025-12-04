@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+});
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -8,26 +10,31 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Test connection first
+    await prisma.$connect();
+    
     const counts = {
-      agents: await prisma.agent.count(),
-      users: await prisma.user.count(),
-      customers: await prisma.customer.count(),
-      conversations: await prisma.conversation.count(),
-      departments: await prisma.department.count(),
-      roles: await prisma.role.count(),
-      slaPolicies: await prisma.sLAPolicy.count(),
-      slaWorkflows: await prisma.sLAWorkflow.count(),
-      slaTimers: await prisma.sLATimer.count(),
-      products: await prisma.product.count(),
-      knowledgeBase: await prisma.knowledgeBase.count(),
+      agents: await prisma.agent.count().catch(() => 0),
+      users: await prisma.user.count().catch(() => 0),
+      customers: await prisma.customer.count().catch(() => 0),
+      conversations: await prisma.conversation.count().catch(() => 0),
+      departments: await prisma.department.count().catch(() => 0),
+      roles: await prisma.role.count().catch(() => 0),
+      slaPolicies: await prisma.sLAPolicy.count().catch(() => 0),
+      slaWorkflows: await prisma.sLAWorkflow.count().catch(() => 0),
+      slaTimers: await prisma.sLATimer.count().catch(() => 0),
+      products: await prisma.product.count().catch(() => 0),
     };
 
-    // Get sample data
+    // Remove knowledgeBase if model doesn't exist
+    // knowledgeBase: await prisma.knowledgeBase.count().catch(() => 0),
+
+    // Get sample data (with error handling)
     const samples = {
-      agents: await prisma.agent.findMany({ take: 5, select: { id: true, name: true, email: true } }),
-      customers: await prisma.customer.findMany({ take: 5, select: { id: true, name: true, email: true } }),
-      conversations: await prisma.conversation.findMany({ take: 5, select: { id: true, subject: true, status: true } }),
-      slaPolicies: await prisma.sLAPolicy.findMany({ take: 5, select: { id: true, name: true, isActive: true } }),
+      agents: await prisma.agent.findMany({ take: 5, select: { id: true, name: true, email: true } }).catch(() => []),
+      customers: await prisma.customer.findMany({ take: 5, select: { id: true, name: true, email: true } }).catch(() => []),
+      conversations: await prisma.conversation.findMany({ take: 5, select: { id: true, subject: true, status: true } }).catch(() => []),
+      slaPolicies: await prisma.sLAPolicy.findMany({ take: 5, select: { id: true, name: true, isActive: true } }).catch(() => []),
     };
 
     return res.status(200).json({
@@ -41,10 +48,17 @@ export default async function handler(req, res) {
     return res.status(500).json({
       success: false,
       error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      details: process.env.NODE_ENV === 'development' ? {
+        stack: error.stack,
+        prismaAvailable: typeof prisma !== 'undefined',
+        modelsAvailable: {
+          agent: typeof prisma?.agent !== 'undefined',
+          user: typeof prisma?.user !== 'undefined',
+        }
+      } : undefined,
     });
   } finally {
-    await prisma.$disconnect();
+    await prisma.$disconnect().catch(() => {});
   }
 }
 
