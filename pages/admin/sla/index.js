@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import AdminLayout from '../../../components/admin/universal/AdminLayout';
 import PageHead from '../../../components/admin/PageHead';
 import Link from 'next/link';
@@ -18,10 +19,21 @@ import {
 } from 'lucide-react';
 
 export default function SLAManagement() {
-  const [activeTab, setActiveTab] = useState('policies');
+  const router = useRouter();
+  const { tab } = router.query;
+  
+  // Set initial tab from URL query parameter, default to 'policies'
+  const [activeTab, setActiveTab] = useState(tab || 'policies');
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Update tab when URL query changes
+  useEffect(() => {
+    if (tab && ['policies', 'workflows', 'active', 'reports'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [tab]);
 
   useEffect(() => {
     fetchStats();
@@ -84,7 +96,11 @@ export default function SLAManagement() {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        // Update URL without page reload
+                        router.push(`/admin/sla?tab=${tab.id}`, undefined, { shallow: true });
+                      }}
                       className={`group relative min-w-0 flex-1 overflow-hidden py-4 px-4 text-center text-sm font-medium transition-colors ${
                         activeTab === tab.id
                           ? 'text-violet-600 dark:text-violet-400 bg-slate-50 dark:bg-slate-800'
