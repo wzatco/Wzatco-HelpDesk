@@ -6,6 +6,7 @@ import NotificationToast from '../../../../components/ui/NotificationToast';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import { Badge } from '../../../../components/ui/badge';
+import { withAuth } from '../../../../lib/withAuth';
 import {
   FolderTree,
   FolderOpen,
@@ -928,5 +929,8 @@ const ThemedSelect = ({ options, value, onChange, placeholder = 'Select option' 
     </AdminLayout>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 
 

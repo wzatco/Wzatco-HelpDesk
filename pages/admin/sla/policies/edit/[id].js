@@ -7,6 +7,7 @@ import { Button } from '../../../../../components/ui/button';
 import { Input } from '../../../../../components/ui/input';
 import { ArrowLeft, Save } from 'lucide-react';
 
+import { withAuth } from '../../../../../lib/withAuth';
 export default function EditSLAPolicy() {
   const router = useRouter();
   const { id } = router.query;
@@ -799,4 +800,7 @@ export default function EditSLAPolicy() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

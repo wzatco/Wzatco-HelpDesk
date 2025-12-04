@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../../components/admin/universal/AdminLayout';
-import { User, Mail, Phone, Briefcase, MapPin, Calendar, Globe, Bell, CheckCircle, XCircle, Image as ImageIcon, Upload, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Phone, Briefcase, MapPin, Calendar, Globe, Bell, CheckCircle, XCircle, Image as ImageIcon, Upload } from 'lucide-react';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function AdminProfilePage() {
   const [profile, setProfile] = useState({ 
     name: '', 
@@ -25,17 +26,6 @@ export default function AdminProfilePage() {
   const [uploadPreview, setUploadPreview] = useState('');
   const [avatarRemoved, setAvatarRemoved] = useState(false);
   const [saveStatus, setSaveStatus] = useState({ type: null, message: '' });
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-  const [showPasswords, setShowPasswords] = useState({
-    current: false,
-    new: false,
-    confirm: false
-  });
-  const [changingPassword, setChangingPassword] = useState(false);
   const fileRef = useRef(null);
 
   const loadProfile = async () => {
@@ -94,13 +84,6 @@ export default function AdminProfilePage() {
         payload.avatarBase64 = avatarBase64;
       }
       
-      // Include password fields if provided
-      if (passwordData.newPassword) {
-        payload.currentPassword = passwordData.currentPassword;
-        payload.newPassword = passwordData.newPassword;
-        payload.confirmPassword = passwordData.confirmPassword;
-      }
-      
       const payloadSize = JSON.stringify(payload).length;
       console.log('Payload size:', payloadSize, 'bytes', '(avatarBase64:', avatarBase64 ? `${avatarBase64.length} chars` : 'not included', ')');
       
@@ -133,13 +116,7 @@ export default function AdminProfilePage() {
         setProfile(prev => ({ ...prev, avatarUrl: json.data?.avatarUrl || '' }));
         setUploadPreview('');
         setAvatarRemoved(false);
-        
-        // Clear password fields if password was changed
-        if (passwordData.newPassword) {
-          setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-        }
-        
-        setSaveStatus({ type: 'success', message: passwordData.newPassword ? 'Profile and password updated successfully!' : 'Profile saved successfully!' });
+        setSaveStatus({ type: 'success', message: 'Profile saved successfully!' });
         
         // Dispatch custom event to refresh header and sidebar
         if (typeof window !== 'undefined') {
@@ -461,85 +438,6 @@ export default function AdminProfilePage() {
                   </div>
                 </div>
 
-                {/* Change Password */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6">
-                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-                    <Lock className="w-5 h-5 text-violet-600" />
-                    Change Password
-                  </h2>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                        Current Password
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type={showPasswords.current ? "text" : "password"}
-                          value={passwordData.currentPassword} 
-                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })} 
-                          className="w-full h-11 px-4 pr-10 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all" 
-                          placeholder="Enter current password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                        >
-                          {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                        New Password
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type={showPasswords.new ? "text" : "password"}
-                          value={passwordData.newPassword} 
-                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })} 
-                          className="w-full h-11 px-4 pr-10 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all" 
-                          placeholder="Enter new password (min 6 characters)"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                        >
-                          {showPasswords.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                        Confirm New Password
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type={showPasswords.confirm ? "text" : "password"}
-                          value={passwordData.confirmPassword} 
-                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })} 
-                          className="w-full h-11 px-4 pr-10 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all" 
-                          placeholder="Confirm new password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                        >
-                          {showPasswords.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
-                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">Passwords do not match</p>
-                      )}
-                    </div>
-                    {passwordData.newPassword && passwordData.newPassword.length > 0 && passwordData.newPassword.length < 6 && (
-                      <p className="text-xs text-red-600 dark:text-red-400">Password must be at least 6 characters long</p>
-                    )}
-                  </div>
-                </div>
-
                 {/* Preferences */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6">
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
@@ -622,3 +520,6 @@ export default function AdminProfilePage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+

@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from '../../../components/ui/avatar';
 import AgentPresenceIndicator from '../../../components/admin/AgentPresenceIndicator';
 import AgentPresenceSelector from '../../../components/admin/AgentPresenceSelector';
 import useSocket from '../../../src/hooks/useSocket';
+import { withAuth } from '../../../lib/withAuth';
 import {
   ArrowLeft,
   Mail,
@@ -1422,3 +1423,5 @@ export default function AgentProfilePage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();

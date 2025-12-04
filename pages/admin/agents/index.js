@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback } from '../../../components/ui/avatar';
 import AgentPresenceIndicator from '../../../components/admin/AgentPresenceIndicator';
 import ThemedSelect from '../../../components/ui/ThemedSelect';
 import useSocket from '../../../src/hooks/useSocket';
+import { withAuth } from '../../../lib/withAuth';
 import { 
   Users, 
   Plus, 
@@ -2517,3 +2518,5 @@ export default function AgentsPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();

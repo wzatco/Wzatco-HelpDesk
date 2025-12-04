@@ -11,6 +11,7 @@ import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '../../../components/ui/avatar';
 import useSocket from '../../../src/hooks/useSocket';
+import { withAuth } from '../../../lib/withAuth';
 import { 
   Ticket,
   Hash,
@@ -4207,3 +4208,5 @@ export default function TicketViewPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();

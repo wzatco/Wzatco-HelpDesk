@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
+import { withAuth } from '../../../lib/withAuth';
 import { 
   Clock, 
   FileText, 
@@ -725,3 +726,5 @@ function StatCard({ title, value, icon: Icon, color }) {
     </Card>
   );
 }
+
+export const getServerSideProps = withAuth();

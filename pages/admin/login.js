@@ -17,17 +17,51 @@ export default function AdminLoginPage() {
   const [success, setSuccess] = useState('');
   const [captchaEnabled, setCaptchaEnabled] = useState(true); // Default to enabled
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (only once)
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/admin');
+      const redirectPath = router.query.redirect || '/admin';
+      router.push(redirectPath);
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated]); // Removed router from dependencies to prevent loops
 
+  // Fetch captcha settings and captcha only once on mount
   useEffect(() => {
-    fetchCaptchaSettings();
-    fetchCaptcha();
-  }, []);
+    let mounted = true;
+    
+    const fetchData = async () => {
+      try {
+        // Fetch both in parallel
+        const [settingsRes, captchaRes] = await Promise.all([
+          fetch('/api/admin/settings/captcha'),
+          fetch('/api/admin/captcha/generate')
+        ]);
+        
+        if (!mounted) return;
+        
+        const settingsData = await settingsRes.json();
+        if (settingsData.success && settingsData.settings.enabledPlacements) {
+          setCaptchaEnabled(settingsData.settings.enabledPlacements.adminLogin !== false);
+        }
+        
+        const captchaData = await captchaRes.json();
+        if (captchaData.success) {
+          setCaptcha(captchaData.captcha);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        if (mounted) {
+          setCaptchaEnabled(true); // Default to enabled
+        }
+      }
+    };
+    
+    fetchData();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty deps - only run once
 
   const fetchCaptchaSettings = async () => {
     try {
@@ -254,4 +288,11 @@ export default function AdminLoginPage() {
     </>
   );
 }
+
+// Prevent Next.js from prefetching this page
+export const getServerSideProps = async () => {
+  return {
+    props: {},
+  };
+};
 

@@ -4,6 +4,7 @@ import AdminLayout from '../../../components/admin/universal/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { withAuth } from '../../../lib/withAuth';
 import { 
   Mail, 
   Send, 
@@ -534,4 +535,7 @@ export default function EmailSettingsPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

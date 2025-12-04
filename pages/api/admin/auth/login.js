@@ -19,12 +19,33 @@ export default async function handler(req, res) {
     const { email, password, captchaInput, captcha } = req.body;
     const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
 
-    // Get security settings
-    const securitySettings = await getSecuritySettings();
+    // Get security settings (with fallback if database fails)
+    let securitySettings;
+    try {
+      securitySettings = await getSecuritySettings();
+    } catch (error) {
+      console.error('Error fetching security settings:', error);
+      // Use default settings if database query fails
+      securitySettings = {
+        adminLoginSecurity: false,
+        dosProtection: false,
+        accountLockEnabled: false,
+        accountLockAttempts: 5,
+        accountLockMinutes: 15
+      };
+    }
 
-    // Get captcha settings to check if admin login captcha is enabled
-    const captchaSettings = await getCaptchaSettings();
-    const captchaEnabledForAdminLogin = captchaSettings.enabledPlacements.adminLogin !== false;
+    // Get captcha settings (with fallback if database fails)
+    let captchaSettings;
+    let captchaEnabledForAdminLogin = false;
+    try {
+      captchaSettings = await getCaptchaSettings();
+      captchaEnabledForAdminLogin = captchaSettings.enabledPlacements.adminLogin !== false;
+    } catch (error) {
+      console.error('Error fetching captcha settings:', error);
+      // Default to disabled if database query fails
+      captchaEnabledForAdminLogin = false;
+    }
 
     // Check if admin login security is enabled
     if (!securitySettings.adminLoginSecurity) {
@@ -104,9 +125,18 @@ export default async function handler(req, res) {
     }
 
     // Find admin by email
-    const admin = await prisma.admin.findUnique({
-      where: { email: email.toLowerCase() }
-    });
+    let admin;
+    try {
+      admin = await prisma.admin.findUnique({
+        where: { email: email.toLowerCase() }
+      });
+    } catch (dbError) {
+      console.error('Database error finding admin:', dbError);
+      return res.status(500).json({
+        success: false,
+        message: 'Database connection error. Please check your database configuration.'
+      });
+    }
 
     if (!admin) {
       // Increment failed attempts
@@ -191,6 +221,19 @@ export default async function handler(req, res) {
       jwtSecret,
       { expiresIn: '48h' } // Token expires in 48 hours
     );
+
+    // Set httpOnly cookie for server-side authentication
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 48 * 60 * 60, // 48 hours in seconds
+      path: '/',
+    };
+    
+    res.setHeader('Set-Cookie', [
+      `authToken=${token}; HttpOnly; ${cookieOptions.secure ? 'Secure;' : ''} SameSite=${cookieOptions.sameSite}; Max-Age=${cookieOptions.maxAge}; Path=${cookieOptions.path}`,
+    ]);
 
     res.status(200).json({
       success: true,

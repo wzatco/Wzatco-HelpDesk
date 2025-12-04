@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Settings, Save, CheckCircle, AlertCircle, Loader2, Shield, Brain, Key, Eye, EyeOff, Upload, X, Ticket, Bell, Lock } from 'lucide-react';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function SettingsPage() {
   const [settings, setSettings] = useState({
     appTitle: '',
@@ -1788,3 +1789,6 @@ export default function SettingsPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+

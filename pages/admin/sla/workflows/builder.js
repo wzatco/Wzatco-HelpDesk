@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../../components/ui/Card';
 
+import { withAuth } from '../../../../lib/withAuth';
 // SLA Node configurations based on SLA Guide
 const SLA_NODE_CATEGORIES = {
   triggers: {
@@ -4590,4 +4591,7 @@ function NodeConfigForm({ node, onUpdate }) {
     </div>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

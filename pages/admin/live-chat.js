@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import useSocket from '../../src/hooks/useSocket'
 
+import { withAuth } from '../../lib/withAuth';
 export default function LiveChat() {
   const [conversations, setConversations] = useState([])
   const [activeConv, setActiveConv] = useState(null)
@@ -106,3 +107,6 @@ export default function LiveChat() {
     </div>
   )
 }
+
+export const getServerSideProps = withAuth();
+

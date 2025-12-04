@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
+import { withAuth } from '../../../lib/withAuth';
 import { 
   Building2, 
   Plus, 
@@ -1406,4 +1407,7 @@ export default function DepartmentsPage() {
     </AdminLayout>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

@@ -4,6 +4,7 @@ import PageHead from '../../../../components/admin/PageHead';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/Card';
 import { Button } from '../../../../components/ui/button';
+import { withAuth } from '../../../../lib/withAuth';
 import { 
   Plus, 
   Clock, 
@@ -289,4 +290,7 @@ export default function SLAPolicies() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

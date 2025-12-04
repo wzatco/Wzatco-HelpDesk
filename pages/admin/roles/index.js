@@ -7,6 +7,7 @@ import NotificationToast from '../../../components/ui/NotificationToast';
 import { Card, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { withAuth } from '../../../lib/withAuth';
 import {
   Shield,
   Plus,
@@ -541,4 +542,7 @@ export default function RolesPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../../components/admin/universal/AdminLayout';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function NotificationsPage() {
   const [list, setList] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -114,5 +115,8 @@ export default function NotificationsPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 
 

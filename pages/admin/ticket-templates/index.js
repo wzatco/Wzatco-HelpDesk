@@ -5,6 +5,7 @@ import AdminLayout from '../../../components/admin/universal/AdminLayout';
 import NotificationToast from '../../../components/ui/NotificationToast';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
+import { withAuth } from '../../../lib/withAuth';
 import { 
   FileText, 
   Plus, 
@@ -797,4 +798,7 @@ export default function TicketTemplatesPage() {
     </AdminLayout>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

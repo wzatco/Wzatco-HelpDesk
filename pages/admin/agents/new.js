@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import ThemedSelect from '../../../components/ui/ThemedSelect';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function NewAgentPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -343,4 +344,7 @@ export default function NewAgentPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

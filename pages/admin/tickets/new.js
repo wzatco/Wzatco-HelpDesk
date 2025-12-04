@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import AdminLayout from '../../../components/admin/universal/AdminLayout';
 import { User, Mail, Phone, MapPin, FileText, Package, Tag, AlertCircle, Upload, X, Search as SearchIcon, CheckCircle, XCircle } from 'lucide-react';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function NewTicketPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -1199,4 +1200,7 @@ export default function NewTicketPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

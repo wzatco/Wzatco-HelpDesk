@@ -3,6 +3,7 @@ import AdminLayout from '../../../components/admin/universal/AdminLayout';
 import PageHead from '../../../components/admin/PageHead';
 import { BarChart3, Package, AlertCircle, Clock, Users, TrendingUp, Download, Calendar, Filter, Building2, Star } from 'lucide-react';
 
+import { withAuth } from '../../../lib/withAuth';
 function ReportsPageContent({ initialTab = 'products' }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [loading, setLoading] = useState(true);
@@ -1342,4 +1343,7 @@ function SummaryCard({ title, value, subtitle, gradient = 'from-slate-900 to-sla
 }
 
 export default ReportsPageContent;
-export { ReportsPageContent };
+export { ReportsPageContent }
+
+export const getServerSideProps = withAuth();
+;

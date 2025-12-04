@@ -11,6 +11,7 @@ import { Users, Shield, RefreshCw, Search, UserCheck, UserX, Mail, Building2 } f
 import { useAuth } from '../../../contexts/AuthContext';
 import usePermissions from '../../../hooks/usePermissions';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function UsersPage() {
   const router = useRouter();
   const { userId, loading: authLoading } = useAuth();
@@ -376,3 +377,6 @@ export default function UsersPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+

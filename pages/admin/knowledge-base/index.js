@@ -34,6 +34,7 @@ import {
 import RichTextEditor from '../../../components/ui/RichTextEditor';
 import ThemedSelect from '../../../components/ui/ThemedSelect';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function KnowledgeBasePage() {
   const router = useRouter();
   const { status } = router.query;
@@ -1308,4 +1309,7 @@ export default function KnowledgeBasePage() {
     </AdminLayout>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

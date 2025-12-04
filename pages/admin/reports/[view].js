@@ -1,6 +1,7 @@
 import { useRouter } from 'next/router';
 import { ReportsPageContent } from './index';
 
+import { withAuth } from '../../../lib/withAuth';
 const viewToTabMap = {
   overview: 'products',
   performance: 'departments',
@@ -17,4 +18,7 @@ export default function ReportsViewRouter() {
 
   return <ReportsPageContent key={initialTab} initialTab={initialTab} />;
 }
+
+export const getServerSideProps = withAuth();
+
 

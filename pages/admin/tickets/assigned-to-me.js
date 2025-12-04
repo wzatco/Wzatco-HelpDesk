@@ -7,6 +7,7 @@ import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
 import { Clock3, Filter, HardDrive, Loader2, Search, Ticket, UserCircle } from 'lucide-react';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function AssignedToMePage() {
   const router = useRouter();
   const [adminProfile, setAdminProfile] = useState(null);
@@ -359,4 +360,7 @@ function StatTile({ label, value, accent }) {
     </div>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

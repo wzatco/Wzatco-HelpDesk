@@ -9,6 +9,7 @@ import { Progress } from '../../components/ui/progress';
 import { Separator } from '../../components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Plus, BarChart3, Users, Settings as SettingsIcon, Ticket as TicketIcon, AlertTriangle, CheckCircle2, Clock, Zap, Heart, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { withAuth } from '../../lib/withAuth';
 
 export default function ModernDashboard() {
   const [dashboardData, setDashboardData] = useState({
@@ -452,3 +453,5 @@ export default function ModernDashboard() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();

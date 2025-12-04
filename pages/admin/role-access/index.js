@@ -5,6 +5,7 @@ import PageHead from '../../../components/admin/PageHead';
 import NotificationToast from '../../../components/ui/NotificationToast';
 import { Card, CardContent } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/button';
+import { withAuth } from '../../../lib/withAuth';
 import {
   Shield,
   Search,
@@ -503,4 +504,7 @@ export default function RoleAccessPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

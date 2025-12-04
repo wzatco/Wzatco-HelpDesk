@@ -6,6 +6,7 @@ import NotificationToast from '../../../components/ui/NotificationToast';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
+import { withAuth } from '../../../lib/withAuth';
 import { 
   Webhook, 
   Key, 
@@ -1507,4 +1508,7 @@ export default function IntegrationsPage() {
     </AdminLayout>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

@@ -12,6 +12,7 @@ import { Plus, Search as SearchIcon, Ticket as TicketIcon, Clock, User as UserIc
 import { useAuth } from '../../../contexts/AuthContext';
 import usePermissions from '../../../hooks/usePermissions';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function TicketsPage() {
   const router = useRouter();
   const { userId, isAuthenticated, loading: authLoading } = useAuth();
@@ -2304,3 +2305,6 @@ export default function TicketsPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+

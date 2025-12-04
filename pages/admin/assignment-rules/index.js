@@ -7,6 +7,7 @@ import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
 import { Settings, Plus, Edit2, Trash2, Eye, ArrowUp, ArrowDown, Save, X } from 'lucide-react';
 
+import { withAuth } from '../../../lib/withAuth';
 export default function AssignmentRulesPage() {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -554,4 +555,7 @@ export default function AssignmentRulesPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

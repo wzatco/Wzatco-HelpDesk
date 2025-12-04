@@ -14,29 +14,39 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const router = useRouter();
 
-  // Load user from localStorage on mount
+  // Load user from localStorage on mount (only once)
   useEffect(() => {
-    loadUser();
-  }, []);
+    let mounted = true;
+    
+    const loadUser = async () => {
+      try {
+        const storedToken = localStorage.getItem('authToken');
+        const storedUser = localStorage.getItem('user');
 
-  const loadUser = async () => {
-    try {
-      const storedToken = localStorage.getItem('authToken');
-      const storedUser = localStorage.getItem('user');
-
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        if (mounted && storedToken && storedUser) {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (error) {
+        console.error('Error loading user:', error);
+        // Clear invalid data
+        if (mounted) {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('user');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      console.error('Error loading user:', error);
-      // Clear invalid data
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    
+    loadUser();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty deps - only run once
 
   const login = async (email, password, captchaInput, captcha) => {
     try {
@@ -72,12 +82,23 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
-    router.push('/admin/login');
+  const logout = async () => {
+    try {
+      // Call logout API to clear server-side cookie
+      await fetch('/api/admin/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (error) {
+      console.error('Logout API error:', error);
+    } finally {
+      // Clear client-side storage
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
+      setToken(null);
+      setUser(null);
+      router.push('/admin/login');
+    }
   };
 
   const updateUser = (updatedUser) => {

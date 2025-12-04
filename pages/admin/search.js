@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { Badge } from '../../components/ui/badge';
 import { Ticket, User, FileText, Search as SearchIcon, Clock, MessageSquare } from 'lucide-react';
 
+import { withAuth } from '../../lib/withAuth';
 export default function SearchPage() {
   const router = useRouter();
   const { q } = router.query;
@@ -291,4 +292,7 @@ export default function SearchPage() {
     </>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 

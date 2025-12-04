@@ -3,6 +3,7 @@ import AdminLayout from '../../../components/admin/universal/AdminLayout';
 import PageHead from '../../../components/admin/PageHead';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/button';
+import { withAuth } from '../../../lib/withAuth';
 import { 
   BarChart3, 
   Clock, 
@@ -467,3 +468,6 @@ function StatusCard({ title, value, icon: Icon, color }) {
     </div>
   );
 }
+
+export const getServerSideProps = withAuth();
+

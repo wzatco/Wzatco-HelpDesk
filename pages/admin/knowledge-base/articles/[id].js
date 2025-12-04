@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import AdminLayout from '../../../../components/admin/universal/AdminLayout';
 import { Button } from '../../../../components/ui/button';
 import { Badge } from '../../../../components/ui/badge';
+import { withAuth } from '../../../../lib/withAuth';
 import {
   BookOpen,
   ArrowLeft,
@@ -221,6 +222,9 @@ export default function ArticleDetailPage() {
     </AdminLayout>
   );
 }
+
+export const getServerSideProps = withAuth();
+
 
 
 
