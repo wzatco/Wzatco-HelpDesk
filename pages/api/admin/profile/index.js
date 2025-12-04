@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -51,7 +52,10 @@ export default async function handler(req, res) {
         timezone,
         notifyEmail,
         notifyPush,
-        avatarBase64
+        avatarBase64,
+        currentPassword,
+        newPassword,
+        confirmPassword
       } = req.body || {};
       
       console.log('Parsed body, avatarBase64 present:', !!avatarBase64, avatarBase64 ? `length: ${avatarBase64.length}` : '');
@@ -120,6 +124,44 @@ export default async function handler(req, res) {
 
       // Build update data - allow empty strings to clear fields
       const updateData = {};
+
+      // Handle password update if provided (must be before other updates)
+      if (newPassword) {
+        // Validate password fields
+        if (!currentPassword) {
+          return res.status(400).json({ 
+            message: 'Current password is required to change password' 
+          });
+        }
+        if (newPassword !== confirmPassword) {
+          return res.status(400).json({ 
+            message: 'New password and confirm password do not match' 
+          });
+        }
+        if (newPassword.length < 6) {
+          return res.status(400).json({ 
+            message: 'New password must be at least 6 characters long' 
+          });
+        }
+
+        // Verify current password
+        if (!admin.password) {
+          return res.status(400).json({ 
+            message: 'No password set. Please set a password first.' 
+          });
+        }
+        
+        const isValidPassword = await bcrypt.compare(currentPassword, admin.password);
+        if (!isValidPassword) {
+          return res.status(401).json({ 
+            message: 'Current password is incorrect' 
+          });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        updateData.password = hashedPassword;
+      }
       if (name !== undefined) updateData.name = name || 'Admin';
       if (email !== undefined) updateData.email = email || targetEmail;
       if (phone !== undefined) updateData.phone = phone || null;
