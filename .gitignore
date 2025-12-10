@@ -3,3 +3,23 @@ node_modules/
 .env.local
 .env
 .DS_Store
+
+# Test and demo files
+*-demo.js
+test-*.js
+test-*.html
+TEST_*.md
+*.test.js
+
+# Upload directories
+public/uploads/
+uploads/
+
+# Database files
+*.db
+*.db-journal
+
+# Temporary documentation (keep README.md)
+*.md
+!README.md
+!CHANGELOG.md

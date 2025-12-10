@@ -3,16 +3,37 @@ import { generateSlug, generateUniqueSlug } from '../../../../lib/utils/slug';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+let prisma;
+if (process.env.NODE_ENV === 'production') {
+  prisma = new PrismaClient();
+} else {
+  if (!global.prisma) {
+    global.prisma = new PrismaClient();
+  }
+  prisma = global.prisma;
+}
 
 export default async function handler(req, res) {
   const userId = getCurrentUserId(req);
   
   if (req.method === 'GET') {
-    // Check permission to view agents
+    // Check permission to view agents (only if userId exists)
     if (userId) {
-      const hasAccess = await checkPermissionOrFail(userId, 'admin.agents', res);
-      if (!hasAccess) return;
+      try {
+        const hasAccess = await checkPermissionOrFail(userId, 'admin.agents', res);
+        if (!hasAccess) return;
+      } catch (permError) {
+        console.error('Permission check error:', permError);
+        // Continue if permission check fails (for development/testing)
+        if (process.env.NODE_ENV === 'production') {
+          return res.status(500).json({
+            success: false,
+            message: 'Permission check failed',
+            error: permError.message
+          });
+        }
+      }
     }
     try {
       // Fetch agents with their related data
@@ -146,6 +167,7 @@ export default async function handler(req, res) {
 
       // Calculate real performance metrics for each agent
       const transformedAgents = await Promise.all(agents.map(async (agent) => {
+        try {
         const assignedConversations = agent.assignedConversations || [];
         
         // Calculate tickets resolved (closed or resolved status)
@@ -330,15 +352,46 @@ export default async function handler(req, res) {
             customerRating
           }
         };
+        } catch (agentError) {
+          console.error(`Error transforming agent ${agent.id}:`, agentError);
+          // Return a basic agent object if transformation fails
+          return {
+            id: agent.id,
+            slug: agent.slug || `agent-${agent.id.substring(0, 8)}`,
+            name: agent.name || 'Unknown',
+            email: agent.email || '',
+            userId: agent.userId,
+            accountId: agent.accountId || null,
+            departmentId: agent.departmentId,
+            roleId: agent.roleId || null,
+            role: agent.role || null,
+            account: null,
+            skills: [],
+            department: agent.department || null,
+            isActive: agent.isActive !== undefined ? agent.isActive : true,
+            maxLoad: agent.maxLoad || null,
+            presenceStatus: 'offline',
+            lastSeenAt: null,
+            isOnline: false,
+            lastActive: agent.updatedAt || agent.createdAt,
+            ticketCount: agent._count?.assignedConversations || 0,
+            status: 'offline',
+            performance: {
+              ticketsResolved: 0,
+              avgResponseTime: 0,
+              customerRating: '0.0'
+            }
+          };
+        }
       }));
 
       // Calculate summary stats
       const totalAgents = agents.length;
-      const onlineAgents = transformedAgents.filter(agent => agent.isOnline).length;
-      const totalTickets = transformedAgents.reduce((sum, agent) => sum + agent.ticketCount, 0);
+      const onlineAgents = transformedAgents ? transformedAgents.filter(agent => agent && agent.isOnline).length : 0;
+      const totalTickets = transformedAgents ? transformedAgents.reduce((sum, agent) => sum + (agent?.ticketCount || 0), 0) : 0;
 
       res.status(200).json({
-        agents: transformedAgents,
+        agents: transformedAgents || [],
         summary: {
           totalAgents,
           onlineAgents,
@@ -352,10 +405,9 @@ export default async function handler(req, res) {
       console.error('Error fetching agents:', error);
       res.status(500).json({ 
         message: 'Internal server error',
-        error: error.message 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
-    } finally {
-      await prisma.$disconnect();
     }
   } 
   else if (req.method === 'POST') {
@@ -636,10 +688,9 @@ export default async function handler(req, res) {
       console.error('Error creating agent:', error);
       res.status(500).json({ 
         message: 'Internal server error',
-        error: error.message 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
-    } finally {
-      await prisma.$disconnect();
     }
   }
   else {

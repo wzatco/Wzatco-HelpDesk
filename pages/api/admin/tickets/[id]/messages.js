@@ -4,6 +4,26 @@ import { parseMentions, findUserByMention } from '@/lib/utils/mentions';
 import { notifyMention, notifyCustomerMessage, notifyFirstResponseCustomer } from '@/lib/utils/notifications';
 import { getTicketSettings } from '@/lib/settings';
 
+// Get Socket.IO instance from server
+let ioInstance = null;
+export function setSocketIO(io) {
+  ioInstance = io;
+}
+
+// Helper to get Socket.IO instance
+function getSocketIO() {
+  if (!ioInstance && typeof require !== 'undefined') {
+    try {
+      // Try to get from server.js
+      const serverModule = require('../../../server');
+      // This won't work directly, so we'll use a different approach
+    } catch (e) {
+      // Ignore
+    }
+  }
+  return ioInstance;
+}
+
 const prisma = new PrismaClient();
 
 export default async function handler(req, res) {

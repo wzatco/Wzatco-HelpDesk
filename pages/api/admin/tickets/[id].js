@@ -205,7 +205,7 @@ export default async function handler(req, res) {
           senderName: senderName,
           senderAvatar: senderAvatar,
           createdAt: message.createdAt,
-          attachments: message.attachments || [],
+          metadata: message.metadata || undefined,
           replyTo: message.metadata?.replyTo || null
         };
       }));

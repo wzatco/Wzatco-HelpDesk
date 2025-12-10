@@ -82,8 +82,10 @@ export default function SettingsPage() {
   const [newSpamEmail, setNewSpamEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingSection, setSavingSection] = useState(null); // Track which section is saving
   const [notification, setNotification] = useState({ type: null, message: '' });
   const [activeSection, setActiveSection] = useState('');
+  const saveTimeouts = useRef({}); // Store debounce timeouts for each section
 
   useEffect(() => {
     fetchSettings();
@@ -321,6 +323,10 @@ export default function SettingsPage() {
       showNotification('error', 'An error occurred while fetching settings');
     } finally {
       setLoading(false);
+      // Reset initial load flag after settings are loaded
+      setTimeout(() => {
+        isInitialLoad.current = false;
+      }, 100);
     }
   };
 
@@ -363,6 +369,269 @@ export default function SettingsPage() {
       fetchSettings();
     }
   };
+
+  // Individual save functions for each section
+  const saveBasicSettings = async () => {
+    setSavingSection('basic');
+    try {
+      const response = await fetch('/api/admin/settings/basic', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appTitle: settings.appTitle,
+          appEmail: settings.appEmail
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('success', 'Basic settings saved');
+      } else {
+        showNotification('error', data.message || 'Failed to save basic settings');
+      }
+    } catch (error) {
+      console.error('Error saving basic settings:', error);
+      showNotification('error', 'An error occurred while saving basic settings');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const saveCaptchaSettings = async () => {
+    setSavingSection('captcha');
+    try {
+      const response = await fetch('/api/admin/settings/captcha', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          captchaLength: captchaSettings.captchaLength,
+          captchaType: captchaSettings.captchaType,
+          enabledPlacements: captchaSettings.enabledPlacements
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('success', 'Captcha settings saved');
+      } else {
+        showNotification('error', data.message || 'Failed to save captcha settings');
+      }
+    } catch (error) {
+      console.error('Error saving captcha settings:', error);
+      showNotification('error', 'An error occurred while saving captcha settings');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const saveAiSettings = async () => {
+    setSavingSection('ai');
+    try {
+      const response = await fetch('/api/admin/settings/ai', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKeys: aiSettings.apiKeys,
+          aiEnabled: aiSettings.aiEnabled
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('success', 'AI settings saved');
+      } else {
+        showNotification('error', data.message || 'Failed to save AI settings');
+      }
+    } catch (error) {
+      console.error('Error saving AI settings:', error);
+      showNotification('error', 'An error occurred while saving AI settings');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const saveFileUploadSettings = async () => {
+    setSavingSection('file-upload');
+    try {
+      const response = await fetch('/api/admin/settings/file-upload', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maxUploadSize: fileUploadSettings.maxUploadSize,
+          allowedFileTypes: fileUploadSettings.allowedFileTypes,
+          clientPhoneUpload: fileUploadSettings.clientPhoneUpload,
+          ticketFileUpload: fileUploadSettings.ticketFileUpload
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('success', 'File upload settings saved');
+      } else {
+        showNotification('error', data.message || 'Failed to save file upload settings');
+      }
+    } catch (error) {
+      console.error('Error saving file upload settings:', error);
+      showNotification('error', 'An error occurred while saving file upload settings');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const saveTicketSettings = async () => {
+    setSavingSection('ticket');
+    try {
+      const response = await fetch('/api/admin/settings/ticket', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          anyStaffCanReply: ticketSettings.anyStaffCanReply,
+          hidePriorityCustomer: ticketSettings.hidePriorityCustomer,
+          hidePriorityAdmin: ticketSettings.hidePriorityAdmin,
+          autoCloseEnabled: ticketSettings.autoCloseEnabled,
+          autoCloseHours: ticketSettings.autoCloseHours,
+          closingMessage: ticketSettings.closingMessage,
+          userMaxOpenTickets: ticketSettings.userMaxOpenTickets,
+          userCanReopen: ticketSettings.userCanReopen,
+          reopenTimeDays: ticketSettings.reopenTimeDays,
+          positiveFeedbackMessage: ticketSettings.positiveFeedbackMessage,
+          negativeFeedbackMessage: ticketSettings.negativeFeedbackMessage
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('success', 'Ticket settings saved');
+      } else {
+        showNotification('error', data.message || 'Failed to save ticket settings');
+      }
+    } catch (error) {
+      console.error('Error saving ticket settings:', error);
+      showNotification('error', 'An error occurred while saving ticket settings');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const saveNotificationSettings = async () => {
+    setSavingSection('notification');
+    try {
+      const response = await fetch('/api/admin/settings/notification', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notificationEnabled: notificationSettings.notificationEnabled,
+          triggers: notificationSettings.triggers
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('success', 'Notification settings saved');
+      } else {
+        showNotification('error', data.message || 'Failed to save notification settings');
+      }
+    } catch (error) {
+      console.error('Error saving notification settings:', error);
+      showNotification('error', 'An error occurred while saving notification settings');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const saveSecuritySettings = async () => {
+    setSavingSection('security');
+    try {
+      const response = await fetch('/api/admin/settings/security', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminLoginSecurity: securitySettings.adminLoginSecurity,
+          accountLockEnabled: securitySettings.accountLockEnabled,
+          accountLockAttempts: securitySettings.accountLockAttempts,
+          accountLockMinutes: securitySettings.accountLockMinutes,
+          dosProtection: securitySettings.dosProtection,
+          spamEmailBlocklist: securitySettings.spamEmailBlocklist
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('success', 'Security settings saved');
+      } else {
+        showNotification('error', data.message || 'Failed to save security settings');
+      }
+    } catch (error) {
+      console.error('Error saving security settings:', error);
+      showNotification('error', 'An error occurred while saving security settings');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  // Debounced auto-save function
+  const debouncedSave = (section, saveFunction, delay = 1500) => {
+    // Clear existing timeout for this section
+    if (saveTimeouts.current[section]) {
+      clearTimeout(saveTimeouts.current[section]);
+    }
+    
+    // Set new timeout
+    saveTimeouts.current[section] = setTimeout(() => {
+      saveFunction();
+      delete saveTimeouts.current[section];
+    }, delay);
+  };
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(saveTimeouts.current).forEach(timeout => clearTimeout(timeout));
+    };
+  }, []);
+
+  // Track if initial load is complete to prevent auto-save on mount
+  const isInitialLoad = useRef(true);
+  
+  useEffect(() => {
+    if (loading) return;
+    // Skip auto-save on initial load
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    debouncedSave('basic', saveBasicSettings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+
+  useEffect(() => {
+    if (loading || isInitialLoad.current) return;
+    debouncedSave('captcha', saveCaptchaSettings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captchaSettings]);
+
+  useEffect(() => {
+    if (loading || isInitialLoad.current) return;
+    debouncedSave('ai', saveAiSettings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiSettings]);
+
+  useEffect(() => {
+    if (loading || isInitialLoad.current) return;
+    debouncedSave('file-upload', saveFileUploadSettings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileUploadSettings]);
+
+  useEffect(() => {
+    if (loading || isInitialLoad.current) return;
+    debouncedSave('ticket', saveTicketSettings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketSettings]);
+
+  useEffect(() => {
+    if (loading || isInitialLoad.current) return;
+    debouncedSave('notification', saveNotificationSettings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationSettings]);
+
+  useEffect(() => {
+    if (loading || isInitialLoad.current) return;
+    debouncedSave('security', saveSecuritySettings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [securitySettings]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -554,7 +823,7 @@ export default function SettingsPage() {
               <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
             </div>
           ) : (
-            <form onSubmit={handleSave}>
+            <div>
               <Card id="basic-settings" className="border border-violet-200 dark:border-slate-700 shadow-xl dark:bg-slate-800 bg-white rounded-2xl scroll-mt-6">
                 <CardHeader className="border-b border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-3">
@@ -596,24 +865,19 @@ export default function SettingsPage() {
                         The default support email address for the application
                       </p>
                     </div>
-                    <div className="flex gap-3 pt-4">
-                      <Button
-                        type="submit"
-                        className="bg-violet-600 hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500 text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed h-11 px-6 rounded-xl"
-                        disabled={saving}
-                      >
-                        {saving ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4 mr-2" />
-                            Save Changes
-                          </>
-                        )}
-                      </Button>
+                    {/* Auto-save indicator */}
+                    <div className="flex items-center gap-2 pt-4 text-xs text-slate-500 dark:text-slate-400">
+                      {savingSection === 'basic' ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                          <span>Auto-saved</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -795,6 +1059,20 @@ export default function SettingsPage() {
                         Toggle to enable or disable captcha protection on each form. Changes are saved automatically and take effect immediately.
                       </p>
                     </div>
+                    {/* Auto-save indicator */}
+                    <div className="flex items-center gap-2 pt-4 text-xs text-slate-500 dark:text-slate-400">
+                      {savingSection === 'captcha' ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                          <span>Auto-saved</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -850,8 +1128,17 @@ export default function SettingsPage() {
                           API Keys
                         </label>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                          Configure API keys for AI services. Keys are stored securely and can be masked for privacy.
+                          Configure API keys for AI services. Keys are stored securely using HMAC hashing and AES encryption. 
+                          Existing keys are masked for privacy. Enter a new key to update it.
                         </p>
+                        {aiSettings.hasApiKeys && (
+                          <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                            <p className="text-xs text-green-700 dark:text-green-400 flex items-center gap-2">
+                              <Shield className="w-3.5 h-3.5" />
+                              API keys are securely stored with HMAC hashing and encryption.
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       {/* OpenAI API Key */}
@@ -867,9 +1154,14 @@ export default function SettingsPage() {
                               ...aiSettings,
                               apiKeys: { ...aiSettings.apiKeys, openai: e.target.value }
                             })}
-                            placeholder="sk-..."
+                            placeholder={aiSettings.apiKeys.openai && aiSettings.apiKeys.openai.includes('••••') ? "Enter new key to update" : "sk-..."}
                             className="w-full h-11 rounded-xl border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white pr-10"
                           />
+                          {aiSettings.apiKeys.openai && aiSettings.apiKeys.openai.includes('••••') && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                              Key is stored. Enter a new key to update it.
+                            </p>
+                          )}
                           <button
                             type="button"
                             onClick={() => setShowApiKeys({ ...showApiKeys, openai: !showApiKeys.openai })}
@@ -960,6 +1252,20 @@ export default function SettingsPage() {
                           For custom AI service integrations
                         </p>
                       </div>
+                    </div>
+                    {/* Auto-save indicator */}
+                    <div className="flex items-center gap-2 pt-4 text-xs text-slate-500 dark:text-slate-400">
+                      {savingSection === 'ai' ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                          <span>Auto-saved</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -1135,6 +1441,20 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       </label>
+                    </div>
+                    {/* Auto-save indicator */}
+                    <div className="flex items-center gap-2 pt-4 text-xs text-slate-500 dark:text-slate-400">
+                      {savingSection === 'file-upload' ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                          <span>Auto-saved</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -1452,6 +1772,20 @@ export default function SettingsPage() {
                         Message displayed when users provide negative feedback
                       </p>
                     </div>
+                    {/* Auto-save indicator */}
+                    <div className="flex items-center gap-2 pt-4 text-xs text-slate-500 dark:text-slate-400">
+                      {savingSection === 'ticket' ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                          <span>Auto-saved</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1546,6 +1880,20 @@ export default function SettingsPage() {
                         </div>
                       </div>
                     )}
+                    {/* Auto-save indicator */}
+                    <div className="flex items-center gap-2 pt-4 text-xs text-slate-500 dark:text-slate-400">
+                      {savingSection === 'notification' ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                          <span>Auto-saved</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1779,10 +2127,24 @@ export default function SettingsPage() {
                         </p>
                       )}
                     </div>
+                    {/* Auto-save indicator */}
+                    <div className="flex items-center gap-2 pt-4 text-xs text-slate-500 dark:text-slate-400">
+                      {savingSection === 'security' ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                          <span>Auto-saved</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
-            </form>
+            </div>
           )}
         </div>
       </AdminLayout>

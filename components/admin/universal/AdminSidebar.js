@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { LayoutDashboard, Ticket, Users, Building2, BookOpen, BarChart3, Puzzle, Settings as SettingsIcon, Plus, ChevronDown, Package, FileText, TrendingUp, Webhook, Shield, Clock } from 'lucide-react';
+import { LayoutDashboard, Ticket, Users, Building2, BookOpen, BarChart3, Puzzle, Settings as SettingsIcon, Plus, ChevronDown, Package, FileText, TrendingUp, Webhook, Shield, Clock, MessageCircle, GraduationCap, Phone } from 'lucide-react';
 
 export default function AdminSidebar({ isOpen, onClose }) {
   const router = useRouter();
@@ -428,6 +428,18 @@ export default function AdminSidebar({ isOpen, onClose }) {
       current: router.pathname.startsWith('/admin/products')
     },
     {
+      name: 'Tutorials & Guides',
+      href: '/admin/tutorials',
+      icon: 'graduation',
+      current: router.pathname.startsWith('/admin/tutorials')
+    },
+    {
+      name: 'Callbacks',
+      href: '/admin/callbacks',
+      icon: 'phone',
+      current: router.pathname.startsWith('/admin/callbacks')
+    },
+    {
       name: 'Knowledge Base',
       href: '/admin/knowledge-base',
       icon: 'kb',
@@ -536,6 +548,7 @@ export default function AdminSidebar({ isOpen, onClose }) {
                         {item.icon === 'kb' && <BookOpen className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'reports' && <BarChart3 className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'clock' && <Clock className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                        {item.icon === 'message-circle' && <MessageCircle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'widgets' && <Puzzle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'settings' && <SettingsIcon className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'shield' && <Shield className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
@@ -618,12 +631,15 @@ export default function AdminSidebar({ isOpen, onClose }) {
                       {item.icon === 'users' && <Users className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'departments' && <Building2 className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'package' && <Package className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                      {item.icon === 'graduation' && <GraduationCap className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                      {item.icon === 'phone' && <Phone className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'file-text' && <FileText className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'trending-up' && <TrendingUp className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'puzzle' && <Puzzle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'kb' && <BookOpen className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'reports' && <BarChart3 className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'clock' && <Clock className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                      {item.icon === 'message-circle' && <MessageCircle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'widgets' && <Puzzle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'settings' && <SettingsIcon className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'shield' && <Shield className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}

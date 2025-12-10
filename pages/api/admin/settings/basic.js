@@ -4,7 +4,8 @@ const prisma = new PrismaClient();
 
 const SETTINGS_KEYS = {
   APP_TITLE: 'app_title',
-  APP_EMAIL: 'app_email'
+  APP_EMAIL: 'app_email',
+  FOOTER_SETTINGS: 'footer_settings'
 };
 
 export default async function handler(req, res) {
@@ -23,10 +24,31 @@ export default async function handler(req, res) {
         settingsObj[setting.key] = setting.value;
       });
 
+      // Parse footer settings
+      let footerSettings = {
+        description: 'Your comprehensive resource for projector setup, troubleshooting, and support.',
+        quickLinks: [
+          { label: 'Home', url: '/' },
+          { label: 'All Articles', url: '/' }
+        ],
+        supportEmail: 'support@wzatco.com',
+        supportPhone: '+91 XXX XXX XXXX',
+        copyrightText: `© ${new Date().getFullYear()} WZATCO. All rights reserved.`
+      };
+
+      if (settingsObj[SETTINGS_KEYS.FOOTER_SETTINGS]) {
+        try {
+          footerSettings = JSON.parse(settingsObj[SETTINGS_KEYS.FOOTER_SETTINGS]);
+        } catch (e) {
+          console.error('Error parsing footer settings:', e);
+        }
+      }
+
       // Return with defaults if not set
       const result = {
         appTitle: settingsObj[SETTINGS_KEYS.APP_TITLE] || 'HelpDesk Pro',
-        appEmail: settingsObj[SETTINGS_KEYS.APP_EMAIL] || 'support@helpdesk.com'
+        appEmail: settingsObj[SETTINGS_KEYS.APP_EMAIL] || 'support@helpdesk.com',
+        footerSettings
       };
 
       res.status(200).json({ success: true, settings: result });
@@ -38,7 +60,7 @@ export default async function handler(req, res) {
     }
   } else if (req.method === 'PATCH') {
     try {
-      const { appTitle, appEmail } = req.body;
+      const { appTitle, appEmail, footerSettings } = req.body;
 
       // Update or create App Title
       if (appTitle !== undefined) {
@@ -69,6 +91,23 @@ export default async function handler(req, res) {
             key: SETTINGS_KEYS.APP_EMAIL,
             value: appEmail.trim(),
             description: 'Application support email address',
+            category: 'basic'
+          }
+        });
+      }
+
+      // Update or create Footer Settings
+      if (footerSettings !== undefined) {
+        await prisma.settings.upsert({
+          where: { key: SETTINGS_KEYS.FOOTER_SETTINGS },
+          update: { 
+            value: JSON.stringify(footerSettings),
+            updatedAt: new Date()
+          },
+          create: {
+            key: SETTINGS_KEYS.FOOTER_SETTINGS,
+            value: JSON.stringify(footerSettings),
+            description: 'Footer settings for public Knowledge Base',
             category: 'basic'
           }
         });

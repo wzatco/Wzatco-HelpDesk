@@ -3,8 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Use SQLite for local development, PostgreSQL for production
+  provider = "sqlite"
+  url      = "file:./dev.db"
+  // For PostgreSQL (Vercel/Production), uncomment below and comment above:
+  // provider = "postgresql"
+  // url      = env("DATABASE_URL")
 }
 
 model Department {
@@ -75,6 +79,7 @@ model Agent {
   updatedAt             DateTime       @updatedAt
   assignedConversations Conversation[]
   worklogs              Worklog[]
+  scheduledCallbacks    ScheduledCallback[]
 
   @@index([departmentId])
   @@index([roleId])
@@ -312,6 +317,26 @@ model Feedback {
   @@index([submittedAt])
 }
 
+model ChatFeedback {
+  id            String   @id @default(cuid())
+  messageId     String   // The bot message ID this feedback is for
+  sessionId     String?  // Chat session ID
+  rating        String   // 'like' or 'dislike'
+  feedback      String?  // Optional text feedback
+  userEmail     String?
+  userName      String?
+  userMessage   String?  // The user's original message
+  aiResponse    String?  // The AI's response
+  category      String?  // Category/topic of the conversation
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([messageId])
+  @@index([rating])
+  @@index([createdAt])
+  @@index([sessionId])
+}
+
 model Worklog {
   id            String       @id @default(cuid())
   conversationId String
@@ -364,6 +389,7 @@ model Product {
   documents     ProductDocument[]
   conversations Conversation[]
   ticketTemplates TicketTemplate[]
+  tutorials     ProductTutorial[]
 
   @@index([isActive])
   @@index([category])
@@ -769,4 +795,129 @@ model SLAEscalation {
   @@index([conversationId])
   @@index([escalationLevel])
   @@index([escalatedAt])
+}
+
+// Live Chat Model - for widget live chat functionality
+model LiveChat {
+  id                String   @id @default(cuid())
+  customerId        String?  // Optional: for registered users
+  customerName      String
+  customerEmail     String
+  department        String
+  status            String   @default("waiting") // waiting, active, resolved, closed
+  assignedAgentId   String?
+  assignedAgentName String?
+  startedAt         DateTime @default(now())
+  lastMessageAt     DateTime @default(now())
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+  tags              String?  // JSON array of tags
+  metadata          Json?    // userAgent, ipAddress, referrer, etc.
+  messages          LiveChatMessage[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, lastMessageAt])
+  @@index([assignedAgentId, status])
+  @@index([customerEmail])
+  @@index([startedAt])
+}
+
+// Scheduled Callback - for callback scheduling feature
+model ScheduledCallback {
+  id          String   @id @default(cuid())
+  customerId  String?  // Optional: for registered customers
+  customerName String
+  customerEmail String
+  phoneNumber String
+  countryCode String   @default("+91")
+  scheduledTime DateTime
+  rescheduledTime DateTime? // New proposed time if admin reschedules
+  status      String   @default("pending") // pending, approved, assigned, denied, completed, cancelled, missed, rescheduled
+  agentId     String?  // Assigned agent
+  agent       Agent?   @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  denialReason String? // Reason for denial
+  rescheduleStatus String? // pending_acceptance, accepted, rejected - for rescheduled callbacks
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([customerEmail])
+  @@index([status])
+  @@index([scheduledTime])
+  @@index([agentId])
+}
+
+// Tutorial - for projector tutorials and guides
+model Tutorial {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  category    String   // Setup, Troubleshooting, Maintenance, etc.
+  content     String?  // Markdown content
+  videoUrl    String?
+  thumbnailUrl String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  views       Int      @default(0)
+  helpful     Int      @default(0)
+  notHelpful  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
+// Product Tutorials - Links products to tutorials (videos, manuals, etc.)
+model ProductTutorial {
+  id                String   @id @default(cuid())
+  productId         String
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  // Tutorial links
+  manualLink            String?  // Manual Link (PDF/Document)
+  demoVideoLink         String?  // Demo Video Link (Youtube/Google Drive)
+  cleaningVideoLink     String?  // Cleaning Video Link (Youtube/Google Drive)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([productId])
+  @@index([productId])
+}
+
+model LiveChatMessage {
+  id          String    @id @default(cuid())
+  chatId      String
+  senderId    String    // Can be customer email or agent ID
+  senderType  String    // customer, agent
+  senderName  String
+  content     String
+  timestamp   DateTime  @default(now())
+  read        Boolean   @default(false)
+  attachments Json?     // Array of attachment objects
+  chat        LiveChat  @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, timestamp])
+  @@index([read])
+}
+
+// OTP Verification - for email verification when accessing tickets
+model OTPVerification {
+  id          String   @id @default(cuid())
+  email       String
+  otp         String   // 6-digit OTP code
+  purpose     String   @default("ticket_access") // ticket_access, password_reset, etc.
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5)
+  verified    Boolean  @default(false)
+  verifiedAt   DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([email, verified])
+  @@index([expiresAt])
+  @@index([createdAt])
 }
