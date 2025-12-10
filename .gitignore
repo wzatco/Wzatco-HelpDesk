@@ -18,9 +18,11 @@ TEST_*.md
 public/uploads/
 uploads/
 
-# Database files
+# Database files (SQLite for local dev only - not for production)
 *.db
 *.db-journal
+prisma/dev.db
+prisma/prisma/dev.db
 
 # Temporary documentation (keep README.md)
 *.md
