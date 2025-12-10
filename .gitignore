@@ -4,6 +4,9 @@ node_modules/
 .env
 .DS_Store
 
+# Nested git repositories
+Wzatcowidget/
+
 # Test and demo files
 *-demo.js
 test-*.js
