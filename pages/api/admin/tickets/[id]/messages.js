@@ -12,15 +12,8 @@ export function setSocketIO(io) {
 
 // Helper to get Socket.IO instance
 function getSocketIO() {
-  if (!ioInstance && typeof require !== 'undefined') {
-    try {
-      // Try to get from server.js
-      const serverModule = require('../../../server');
-      // This won't work directly, so we'll use a different approach
-    } catch (e) {
-      // Ignore
-    }
-  }
+  // Socket.IO instance should be set via setSocketIO() from server.js
+  // This function is kept for compatibility but the instance must be set externally
   return ioInstance;
 }
 
