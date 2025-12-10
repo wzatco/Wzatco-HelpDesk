@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
 import AdminLayout from '../../../components/admin/universal/AdminLayout';
@@ -35,12 +35,9 @@ import {
   UserCircle,
   Tag as TagIcon,
   Plus,
+  File,
   Paperclip,
   Image as ImageIcon,
-  File,
-  Bold,
-  Italic,
-  Underline,
   Reply,
   Maximize2,
   Minimize2,
@@ -68,6 +65,7 @@ import {
   CheckCircle,
   Pause
 } from 'lucide-react';
+import EmojiPicker from '../../../components/widget/chat/EmojiPicker';
 
 export default function TicketViewPage() {
   const router = useRouter();
@@ -107,13 +105,17 @@ export default function TicketViewPage() {
   const [addingTag, setAddingTag] = useState(false);
   const [conversationExpanded, setConversationExpanded] = useState(true); // Always expanded by default
   const [sidebarHovered, setSidebarHovered] = useState(false);
-  const [attachments, setAttachments] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null); // { file, previewUrl, type, name }
+  const [isUploading, setIsUploading] = useState(false);
+  const [fileSizeError, setFileSizeError] = useState(null); // { fileSizeMB: string }
+  const fileInputRef = useRef(null);
   const [showFormattingToolbar, setShowFormattingToolbar] = useState(false);
   const [cannedResponses, setCannedResponses] = useState([]);
   const [showKBSearch, setShowKBSearch] = useState(false);
   const [internalNote, setInternalNote] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [viewingImage, setViewingImage] = useState(null);
   const [activities, setActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [customerTickets, setCustomerTickets] = useState([]);
@@ -300,6 +302,10 @@ export default function TicketViewPage() {
         
         const checkConnection = () => {
           if (socket.connected) {
+            // Join ticket room for real-time messages
+            console.log(`🔌 Admin: Joining room ticket_${id}`);
+            socket.emit('join_ticket_room', { ticketId: id });
+            
             // Emit ticket:view when socket is connected
             socket.emit('ticket:view', {
               ticketId: id,
@@ -356,8 +362,12 @@ export default function TicketViewPage() {
 
     // Also listen for connection events
     const handleConnect = () => {
-      // Re-emit ticket:view when reconnected
+      // Re-join ticket room and re-emit ticket:view when reconnected
       if (id) {
+        console.log(`🔌 Admin: Reconnected, joining room ticket_${id}`);
+        socket.emit('join_room', { conversationId: id });
+        socket.emit('join_ticket_room', { ticketId: id }); // Legacy support
+        
         fetch('/api/admin/profile')
           .then(res => res.json())
           .then(data => {
@@ -387,17 +397,68 @@ export default function TicketViewPage() {
       }
     };
 
+    // Listen for new messages
+    const handleReceiveMessage = (messageData) => {
+      console.log('📨 Admin: Received message:', messageData);
+      
+      // CRITICAL: Socket ID Exclusion - ignore if this is our own message
+      if (messageData.socketId === socket.id) {
+        console.log('⚠️ Admin: Ignoring own message (socketId match):', messageData.id);
+        return;
+      }
+      
+      // Only process messages for this conversation
+      if (messageData.conversationId === id) {
+        setMessages(prev => {
+          // Check if message already exists (safety net)
+          if (prev.some(m => m.id === messageData.id)) {
+            console.log('⚠️ Admin: Message already exists, skipping:', messageData.id);
+            return prev;
+          }
+          
+          console.log('✅ Admin: Adding new message:', messageData.id);
+          return [...prev, {
+            id: messageData.id,
+            content: messageData.content,
+            senderType: messageData.senderType,
+            senderId: messageData.senderId,
+            senderName: messageData.senderName,
+            senderAvatar: null, // Can be enhanced later
+            createdAt: messageData.createdAt,
+            metadata: messageData.metadata || undefined,
+            replyTo: messageData.replyTo || null
+          }];
+        });
+
+        // Update ticket's lastMessageAt
+        setTicket(prev => prev ? {
+          ...prev,
+          lastMessageAt: messageData.createdAt
+        } : prev);
+
+        // Scroll to bottom
+        setTimeout(() => {
+          if (conversationScrollRef.current) {
+            conversationScrollRef.current.scrollTop = conversationScrollRef.current.scrollHeight;
+          }
+        }, 100);
+      }
+    };
+
     socket.on('ticket:viewer:joined', handleViewerJoined);
     socket.on('ticket:viewer:left', handleViewerLeft);
     socket.on('connect', handleConnect);
+    socket.on('receive_message', handleReceiveMessage);
 
     // Cleanup: leave ticket view when component unmounts
     return () => {
       socket.off('ticket:viewer:joined', handleViewerJoined);
       socket.off('ticket:viewer:left', handleViewerLeft);
       socket.off('connect', handleConnect);
+      socket.off('receive_message', handleReceiveMessage);
       if (socket.connected && id) {
         socket.emit('ticket:leave', { ticketId: id });
+        socket.emit('leave_ticket_room', { ticketId: id });
       }
     };
   }, [socketRef, id]);
@@ -704,103 +765,7 @@ export default function TicketViewPage() {
     }
   };
 
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files || []);
-    const maxSizeBytes = fileUploadSettings.maxUploadSize * 1024 * 1024;
-    const allowedTypes = fileUploadSettings.allowedFileTypes;
-    
-    files.forEach(file => {
-      // Check file size
-      if (file.size > maxSizeBytes) {
-        showNotification('error', `File ${file.name} is too large. Max size is ${fileUploadSettings.maxUploadSize}MB.`);
-        return;
-      }
-      
-      // Check file type if allowed types are configured
-      if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
-        showNotification('error', `File ${file.name} type (${file.type}) is not allowed.`);
-        return;
-      }
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result;
-        setAttachments(prev => [...prev, {
-          id: Date.now() + Math.random(),
-          filename: file.name,
-          mimeType: file.type,
-          size: file.size,
-          base64
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
-    // Reset file input
-    if (e.target) {
-      e.target.value = '';
-    }
-  };
-
-  const removeAttachment = (attachmentId) => {
-    setAttachments(prev => prev.filter(a => a.id !== attachmentId));
-  };
-
-  const formatText = (command) => {
-    const textareaId = 'normal-textarea';
-    let textarea = document.getElementById(textareaId);
-    if (!textarea) {
-      textarea = document.querySelector('textarea[placeholder="Type your message here..."]');
-    }
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = newMessage.substring(start, end);
-    let formattedText = '';
-    let cursorOffset = 0;
-
-    switch (command) {
-      case 'bold':
-        if (selectedText) {
-          formattedText = `**${selectedText}**`;
-          cursorOffset = selectedText.length + 4;
-        } else {
-          formattedText = '**bold text**';
-          cursorOffset = 4; // Position cursor before "bold text"
-        }
-        break;
-      case 'italic':
-        if (selectedText) {
-          formattedText = `*${selectedText}*`;
-          cursorOffset = selectedText.length + 2;
-        } else {
-          formattedText = '*italic text*';
-          cursorOffset = 1; // Position cursor before "italic text"
-        }
-        break;
-      case 'underline':
-        if (selectedText) {
-          formattedText = `__${selectedText}__`;
-          cursorOffset = selectedText.length + 4;
-        } else {
-          formattedText = '__underlined text__';
-          cursorOffset = 2; // Position cursor before "underlined text"
-        }
-        break;
-      default:
-        return;
-    }
-
-    const newText = newMessage.substring(0, start) + formattedText + newMessage.substring(end);
-    setNewMessage(newText);
-    
-    // Restore cursor position
-    setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + formattedText.length - (selectedText ? 0 : formattedText.length - cursorOffset);
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
-  };
 
   const insertEmoji = (emoji) => {
     const textareaId = 'normal-textarea';
@@ -934,38 +899,146 @@ export default function TicketViewPage() {
     }
   };
 
+  const handleFileUpload = (file) => {
+    if (!file) return;
+
+    // File size validation (50MB limit)
+    const maxFileSize = 50 * 1024 * 1024; // 50MB in bytes
+    const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    
+    if (file.size > maxFileSize) {
+      setFileSizeError({ fileSizeMB });
+      return;
+    }
+
+    // Determine file type
+    const mimeType = file.type || 'application/octet-stream';
+    let type = 'file';
+    if (mimeType.startsWith('image/')) {
+      type = 'image';
+    } else if (mimeType.startsWith('video/')) {
+      type = 'video';
+    }
+
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file);
+
+    // Set selected file state (draft mode)
+    setSelectedFile({
+      file,
+      previewUrl,
+      type,
+      name: file.name
+    });
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if ((!newMessage.trim() && attachments.length === 0) || sendingMessage) return;
+    
+    // Don't send if both message and file are empty
+    if ((!newMessage.trim() && !selectedFile) || sendingMessage || !id) return;
 
-    const messageContent = newMessage.trim() || '(No message text)';
-    const messageAttachments = [...attachments];
+    const messageContent = newMessage.trim();
     const replyToId = replyingTo?.id || null;
+    const socket = socketRef.current;
 
-    // Optimistically add message to UI immediately (before API call)
+    if (!socket || !socket.connected) {
+      showNotification('error', 'Connection lost. Please refresh the page.');
+      return;
+    }
+
+    // Get admin identity - fetch fresh if needed
+    let adminId = 'admin';
+    let adminName = adminProfile.name || 'Admin';
+    let adminAvatar = adminProfile.avatarUrl || null;
+    
+    // Try to get admin ID from profile fetch
+    try {
+      const profileResponse = await fetch('/api/admin/profile');
+      const profileData = await profileResponse.json();
+      if (profileData?.data) {
+        adminId = profileData.data.id || 'admin';
+        adminName = profileData.data.name || 'Admin';
+        adminAvatar = profileData.data.avatarUrl || null;
+      }
+    } catch (err) {
+      console.warn('Could not fetch admin profile, using defaults');
+    }
+
+    // Upload file if selected
+    let attachmentMetadata = null;
+    if (selectedFile) {
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedFile.file);
+
+        const response = await fetch('/api/chat/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          attachmentMetadata = {
+            type: data.attachment.type,
+            url: data.attachment.url,
+            fileName: data.attachment.fileName,
+          };
+        } else {
+          // Handle file size error specifically
+          if (response.status === 413 || (data.error && (data.error.includes('exceeded') || data.error.includes('File size')))) {
+            const fileSizeMB = (selectedFile.file.size / (1024 * 1024)).toFixed(2);
+            setFileSizeError({ fileSizeMB });
+          } else {
+            showNotification('error', data.error || 'Failed to upload file');
+          }
+          setIsUploading(false);
+          return;
+        }
+      } catch (error) {
+        console.error('File upload error:', error);
+        // Check if it's a file size error
+        if (error.message && error.message.includes('exceeded')) {
+          const fileSizeMB = (selectedFile.file.size / (1024 * 1024)).toFixed(2);
+          setFileSizeError({ fileSizeMB });
+        } else {
+          showNotification('error', 'Failed to upload file');
+        }
+        setIsUploading(false);
+        return;
+      } finally {
+        setIsUploading(false);
+        // Clean up preview URL
+        if (selectedFile.previewUrl) {
+          URL.revokeObjectURL(selectedFile.previewUrl);
+        }
+        setSelectedFile(null);
+      }
+    }
+
+    // Create optimistic message
     const optimisticMessage = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       content: messageContent,
       senderType: 'admin',
-      senderName: adminProfile.name,
-      senderAvatar: adminProfile.avatarUrl,
+      senderId: adminId,
+      senderName: adminName,
+      senderAvatar: adminAvatar,
       createdAt: new Date().toISOString(),
-      attachments: messageAttachments.map(att => ({
-        id: att.id || `temp-att-${Date.now()}-${Math.random()}`,
-        url: att.url || att.preview,
-        filename: att.filename,
-        mimeType: att.mimeType
-      })),
-      replyTo: replyToId
+      metadata: attachmentMetadata,
+      replyTo: replyToId,
+      status: 'sending'
     };
 
-    // Add optimistic message immediately
+    // Optimistically add to UI
+    console.log('💬 Admin: Adding optimistic message');
     setMessages(prev => [...prev, optimisticMessage]);
     setNewMessage('');
-    setAttachments([]);
     setReplyingTo(null);
 
-    // Scroll to bottom immediately
+    // Scroll to bottom
     setTimeout(() => {
       if (conversationScrollRef.current) {
         conversationScrollRef.current.scrollTop = conversationScrollRef.current.scrollHeight;
@@ -974,76 +1047,55 @@ export default function TicketViewPage() {
 
     try {
       setSendingMessage(true);
-      const response = await fetch(`/api/admin/tickets/${id}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-role': 'admin'
-        },
-        body: JSON.stringify({
-          content: messageContent,
-          senderType: 'admin',
-          attachments: messageAttachments,
-          replyToId: replyToId
-        }),
+
+      // Create payload with socketId for exclusion
+      // Allow empty content if there's an attachment
+      const payload = {
+        conversationId: id,
+        content: messageContent || '', // Empty string is allowed if metadata exists
+        senderId: adminId,
+        senderType: 'admin',
+        senderName: adminName,
+        socketId: socket.id, // CRITICAL: Include socket ID for exclusion
+        metadata: attachmentMetadata || undefined,
+        replyToId: replyToId || undefined
+      };
+
+      console.log('📤 Admin: Sending message via Socket.IO:', payload);
+      socket.emit('send_message', payload);
+
+      // Wait for confirmation (optional - for error handling)
+      const confirmationTimeout = setTimeout(() => {
+        console.warn('⚠️ Admin: No confirmation received, message may have failed');
+      }, 5000);
+
+      socket.once('message_sent', (data) => {
+        clearTimeout(confirmationTimeout);
+        if (data.success) {
+          console.log('✅ Admin: Message confirmed:', data.id);
+          // Replace optimistic message with real one
+          setMessages(prev => prev.map(m => 
+            m.id === optimisticMessage.id 
+              ? { ...m, id: data.id, status: 'sent' }
+              : m
+          ));
+          showNotification('success', 'Message sent successfully');
+        }
       });
 
-      const data = await response.json();
+      // Update ticket's lastMessageAt optimistically
+      setTicket(prev => prev ? {
+        ...prev,
+        lastMessageAt: new Date().toISOString()
+      } : prev);
 
-      if (response.ok) {
-        // Replace optimistic message with real message from server
-        const realMessage = data.data;
-        // Transform to match expected format
-        const transformedMessage = {
-          id: realMessage.id,
-          content: realMessage.content,
-          senderType: realMessage.senderType,
-          senderId: realMessage.senderId,
-          senderName: realMessage.senderName,
-          senderAvatar: realMessage.senderAvatar,
-          createdAt: realMessage.createdAt,
-          attachments: realMessage.attachments || [],
-          replyTo: realMessage.metadata?.replyTo || replyToId || null
-        };
-        
-        setMessages(prev => {
-          const filtered = prev.filter(m => m.id !== optimisticMessage.id);
-          return [...filtered, transformedMessage];
-        });
-
-        // Update ticket's lastMessageAt without full refetch
-        setTicket(prev => prev ? {
-          ...prev,
-          lastMessageAt: realMessage.createdAt
-        } : prev);
-
-        showNotification('success', 'Message sent successfully');
-        
-        // Scroll to bottom after real message is added
-        setTimeout(() => {
-          if (conversationScrollRef.current) {
-            conversationScrollRef.current.scrollTop = conversationScrollRef.current.scrollHeight;
-          }
-        }, 100);
-      } else {
-        // Remove optimistic message on error
-        setMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
-        showNotification('error', data.message || 'Failed to send message');
-        // Restore form state on error
-        setNewMessage(messageContent);
-        setAttachments(messageAttachments);
-        if (replyToId) {
-          setReplyingTo(messages.find(m => m.id === replyToId));
-        }
-      }
     } catch (error) {
       console.error('Error sending message:', error);
       // Remove optimistic message on error
       setMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
       showNotification('error', 'Failed to send message');
-      // Restore form state on error
+      // Restore form state
       setNewMessage(messageContent);
-      setAttachments(messageAttachments);
       if (replyToId) {
         setReplyingTo(messages.find(m => m.id === replyToId));
       }
@@ -1478,6 +1530,44 @@ export default function TicketViewPage() {
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
     if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
     return then.toLocaleDateString();
+  };
+
+  // Format message time in IST (exact timestamp)
+  const formatMessageTime = (date) => {
+    if (!date) return '';
+    const dateObj = new Date(date);
+    return new Intl.DateTimeFormat('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
+    }).format(dateObj);
+  };
+
+  // Format date divider (Today, Yesterday, or date)
+  const formatDateDivider = (date) => {
+    if (!date) return '';
+    const dateObj = new Date(date);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const dateStr = dateObj.toDateString();
+    const todayStr = today.toDateString();
+    const yesterdayStr = yesterday.toDateString();
+
+    if (dateStr === todayStr) {
+      return 'Today';
+    } else if (dateStr === yesterdayStr) {
+      return 'Yesterday';
+    } else {
+      return new Intl.DateTimeFormat('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Asia/Kolkata'
+      }).format(dateObj);
+    }
   };
 
   const showNotification = (type, message) => {
@@ -1993,91 +2083,122 @@ export default function TicketViewPage() {
                             // Treat 'admin' messages the same as 'agent' messages (right-aligned)
                             const isAdminOrAgent = message.senderType === 'agent' || message.senderType === 'admin';
                             const repliedToMessage = message.replyTo ? messages.find(m => m.id === message.replyTo) : null;
+                            const prevMessage = index > 0 ? messages[index - 1] : null;
+                            
+                            // Show date divider if date changed
+                            const showDateDivider = !prevMessage || 
+                              new Date(message.createdAt).toDateString() !== new Date(prevMessage.createdAt).toDateString();
                             
                             return (
-                              <div key={message.id} className={`flex ${isAdminOrAgent ? 'justify-end' : 'justify-start'} animate-slide-up group`}>
-                                <div className={`flex items-start space-x-3 max-w-[85%] sm:max-w-md ${isAdminOrAgent ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                                  <Avatar className="w-10 h-10 ring-2 ring-slate-200 dark:ring-slate-700 flex-shrink-0">
-                                    {message.senderAvatar ? (
-                                      <AvatarImage src={message.senderAvatar} alt={message.senderName || (isAdminOrAgent ? 'Agent' : 'Customer')} />
-                                    ) : null}
-                                    <AvatarFallback className={`${isAdminOrAgent ? 'bg-gradient-to-br from-violet-500 to-purple-600' : 'bg-gradient-to-br from-slate-500 to-slate-600'} text-white font-semibold`}>
-                                      {message.senderName 
-                                        ? message.senderName.charAt(0).toUpperCase() 
-                                        : (isAdminOrAgent ? 'A' : 'C')}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div className={`flex flex-col min-w-0 flex-1 ${isAdminOrAgent ? 'items-end' : 'items-start'}`}>
-                                    {/* Reply Context */}
-                                    {repliedToMessage && (
-                                      <div className={`mb-2 px-3 py-2 rounded-lg border-l-2 w-full ${isAdminOrAgent ? 'border-violet-400 bg-violet-50/50 dark:bg-violet-900/20' : 'border-slate-400 bg-slate-100 dark:bg-slate-700/50'} text-xs`}>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <Reply className="w-3 h-3 flex-shrink-0" />
-                                          <span className="font-semibold flex-shrink-0">
-                                            {repliedToMessage.senderType === 'agent' || repliedToMessage.senderType === 'admin' ? 'You' : ticket.customer?.name || 'Customer'}
-                                          </span>
-                                        </div>
-                                        <p className="text-slate-600 dark:text-slate-300 break-words whitespace-pre-wrap leading-relaxed">{repliedToMessage.content}</p>
-                                      </div>
-                                    )}
-                                    
-                                    <div className={`px-4 py-3 rounded-2xl shadow-md w-full break-words ${
-                                      isAdminOrAgent
-                                      ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-br-md' 
-                                        : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-bl-md'
-                                    }`}>
-                                      <div className="text-sm leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere" dangerouslySetInnerHTML={{
-                                        __html: message.content
-                                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                                          .replace(/__(.*?)__/g, '<u>$1</u>')
-                                      }} />
-                                      
-                                      {/* Attachments */}
-                                      {message.attachments && message.attachments.length > 0 && (
-                                        <div className="mt-3 space-y-2">
-                                          {message.attachments.map((attachment) => {
-                                            const isImage = attachment.mimeType?.startsWith('image/');
-                                            return (
-                                              <div key={attachment.id} className={`rounded-lg overflow-hidden ${isAdminOrAgent ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800'}`}>
-                                                {isImage ? (
-                                                  <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="block">
-                                                    <img src={attachment.url} alt={attachment.filename} className="max-w-xs max-h-48 object-contain" />
-                                                  </a>
-                                                ) : (
-                                                  <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 hover:bg-white/10 transition-colors">
-                                                    <File className="w-4 h-4" />
-                                                    <span className="text-xs truncate">{attachment.filename}</span>
-                                                  </a>
-                                                )}
+                              <React.Fragment key={message.id}>
+                                {showDateDivider && (
+                                  <div className="flex justify-center my-3 w-full">
+                                    <span className="text-xs text-slate-600 dark:text-slate-400 bg-white/90 dark:bg-slate-800/90 px-2.5 py-1 rounded-full shadow-sm">
+                                      {formatDateDivider(message.createdAt)}
+                                    </span>
                                   </div>
-                                            );
-                                          })}
+                                )}
+                                <div className={`flex ${isAdminOrAgent ? 'justify-end' : 'justify-start'} mb-0.5 group`}>
+                                  <div className={`flex items-end gap-1 max-w-[85%] sm:max-w-[75%] ${isAdminOrAgent ? 'flex-row-reverse' : 'flex-row'}`}>
+                                    {/* WhatsApp-style message bubble */}
+                                    <div
+                                      className={`relative px-2.5 py-1.5 sm:px-3 sm:py-2 ${
+                                        isAdminOrAgent
+                                          ? 'bg-[#DCF8C6] dark:bg-[#005C4B] text-gray-900 dark:text-white'
+                                          : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white shadow-[0_1px_0.5px_rgba(0,0,0,0.13)]'
+                                      }`}
+                                      style={{
+                                        borderRadius: isAdminOrAgent
+                                          ? '7.5px 7.5px 1.5px 7.5px'
+                                          : '7.5px 7.5px 7.5px 1.5px'
+                                      }}
+                                    >
+                                      {/* Reply preview if message is a reply */}
+                                      {repliedToMessage && (
+                                        <div 
+                                          className={`mb-2 p-2 rounded border-l-4 ${
+                                            isAdminOrAgent
+                                              ? 'bg-white/30 dark:bg-white/10 border-white/50'
+                                              : 'bg-gray-100 dark:bg-slate-700 border-gray-300 dark:border-slate-600'
+                                          }`}
+                                        >
+                                          <div className="text-xs font-semibold opacity-80 mb-1">
+                                            {repliedToMessage.senderType === 'agent' || repliedToMessage.senderType === 'admin' ? 'You' : (ticket.customer?.name || 'Customer')}
+                                          </div>
+                                          <div className="text-xs opacity-70 line-clamp-2">
+                                            {repliedToMessage.content || 'Message'}
+                                          </div>
                                         </div>
                                       )}
+                                      
+                                      {/* Attachment Preview */}
+                                      {message.metadata && message.metadata.type && (
+                                        <div className="mb-2">
+                                          {message.metadata.type === 'image' && (
+                                            <img 
+                                              src={message.metadata.url} 
+                                              alt={message.metadata.fileName || 'Image'} 
+                                              className="max-w-full max-h-64 sm:max-h-80 rounded-lg object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                              onClick={() => window.open(message.metadata.url, '_blank')}
+                                            />
+                                          )}
+                                          {message.metadata.type === 'video' && (
+                                            <video 
+                                              src={message.metadata.url} 
+                                              controls
+                                              className="max-w-full max-h-64 sm:max-h-80 rounded-lg"
+                                              preload="metadata"
+                                            >
+                                              Your browser does not support the video tag.
+                                            </video>
+                                          )}
+                                          {message.metadata.type === 'file' && (
+                                            <a
+                                              href={message.metadata.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-2 p-2.5 bg-white/20 dark:bg-white/10 rounded hover:bg-white/30 transition-colors"
+                                            >
+                                              <File className="w-5 h-5 flex-shrink-0" />
+                                              <div className="flex-1 min-w-0">
+                                                <div className="text-xs font-medium truncate">{message.metadata.fileName || 'File'}</div>
+                                                <div className="text-[10px] text-slate-500 dark:text-slate-400">Click to download</div>
+                                              </div>
+                                            </a>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* Message content */}
+                                      {message.content && (
+                                        <p className="text-sm sm:text-base whitespace-pre-wrap leading-relaxed break-words">
+                                          {message.content}
+                                        </p>
+                                      )}
+
+                                      {/* Timestamp - WhatsApp style (bottom right, small) */}
+                                      <div className="flex items-center justify-end gap-1 mt-1">
+                                        <span className={`text-[11px] leading-none ${
+                                          isAdminOrAgent 
+                                            ? 'text-gray-700 dark:text-gray-300' 
+                                            : 'text-gray-600 dark:text-gray-400'
+                                        }`}>
+                                          {formatMessageTime(message.createdAt)}
+                                        </span>
+                                      </div>
                                     </div>
-                                    
-                                    <div className={`flex items-center space-x-2 mt-2 ${isAdminOrAgent ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                                      <button
-                                        onClick={() => setReplyingTo(message)}
-                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 flex items-center gap-1"
-                                        title="Reply to this message"
-                                      >
-                                        <Reply className="w-3 h-3" />
-                                        Reply
-                                      </button>
-                                      <span className="text-slate-300 dark:text-slate-600">•</span>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                        {isAdminOrAgent 
-                                          ? (message.senderName || 'You')
-                                          : (message.senderName || ticket.customer?.name || ticket.customerName || 'Customer')}
-                                      </p>
-                                      <span className="text-slate-300 dark:text-slate-600">•</span>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">{formatTimeAgo(message.createdAt)}</p>
+
+                                    {/* Reply button (on hover) - Only show on desktop */}
+                                    <button
+                                      onClick={() => setReplyingTo(message)}
+                                      className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg"
+                                      title="Reply"
+                                    >
+                                      <Reply className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                                    </button>
                                   </div>
                                 </div>
-                              </div>
-                            </div>
+                            </React.Fragment>
                             );
                           })}
                         </div>
@@ -2113,107 +2234,147 @@ export default function TicketViewPage() {
                                 </div>
                               </div>
                             )}
-                            
-                            {/* Text Formatting Toolbar */}
-                            <div className="flex items-center gap-1 p-2 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
-                              <button
-                                type="button"
-                                onClick={() => formatText('bold')}
-                                className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
-                                title="Bold"
-                              >
-                                <Bold className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => formatText('italic')}
-                                className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
-                                title="Italic"
-                              >
-                                <Italic className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => formatText('underline')}
-                                className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
-                                title="Underline"
-                              >
-                                <Underline className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                              </button>
-                              <div className="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-1"></div>
-                              <label className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors cursor-pointer">
-                                <Paperclip className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                                <input
-                                  type="file"
-                                  multiple
-                                  onChange={handleFileChange}
-                                  className="hidden"
-                                  accept="image/*,.pdf,.doc,.docx,.txt"
-                                />
-                              </label>
-                            </div>
-                            
-                            {/* Attachments Preview */}
-                            {attachments.length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {attachments.map((attachment) => (
-                                  <div key={attachment.id} className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                                    {attachment.mimeType?.startsWith('image/') ? (
-                                      <ImageIcon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                                    ) : (
-                                      <File className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                                    )}
-                                    <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-[150px]">{attachment.filename}</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => removeAttachment(attachment.id)}
-                                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                    >
-                                      <XIcon className="w-3 h-3" />
-                                    </button>
+
+                            {/* File Preview (Draft Mode) */}
+                            {selectedFile && (
+                              <div className="px-3 sm:px-4 py-2 bg-gray-100 dark:bg-slate-700 border-t border-gray-200 dark:border-slate-600">
+                                <div className="flex items-center gap-3 p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600">
+                                  {selectedFile.type === 'image' && (
+                                    <img
+                                      src={selectedFile.previewUrl}
+                                      alt={selectedFile.name}
+                                      className="w-12 h-12 object-cover rounded"
+                                    />
+                                  )}
+                                  {selectedFile.type === 'video' && (
+                                    <div className="w-12 h-12 bg-gray-200 dark:bg-slate-700 rounded flex items-center justify-center">
+                                      <svg className="w-6 h-6 text-gray-500 dark:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  {selectedFile.type === 'file' && (
+                                    <div className="w-12 h-12 bg-gray-200 dark:bg-slate-700 rounded flex items-center justify-center">
+                                      <svg className="w-6 h-6 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                      {selectedFile.name}
+                                    </div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                                      {selectedFile.type === 'image' ? 'Image' : selectedFile.type === 'video' ? 'Video' : 'File'}
+                                    </div>
                                   </div>
-                                ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (selectedFile.previewUrl) {
+                                        URL.revokeObjectURL(selectedFile.previewUrl);
+                                      }
+                                      setSelectedFile(null);
+                                    }}
+                                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0"
+                                    title="Remove file"
+                                  >
+                                    <XIcon className="w-5 h-5" />
+                                  </button>
+                                </div>
                               </div>
                             )}
                             
-                            <div className="flex items-end space-x-3">
-                              <div className="flex-1">
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                                  Send a message
-                                </label>
+                            {/* WhatsApp-style Input Area */}
+                            <div className="flex items-end gap-2 px-3 sm:px-4 py-3 bg-gray-50 dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700">
+                              {/* File Attachment Button */}
+                              <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isUploading || sendingMessage || ticket.status === 'closed' || ticket.status === 'resolved'}
+                                className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Attach file"
+                              >
+                                {isUploading ? (
+                                  <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                ) : (
+                                  <Paperclip className="w-5 h-5 sm:w-6 sm:h-6" />
+                                )}
+                              </button>
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleFileUpload(file);
+                                  }
+                                  e.target.value = ''; // Reset input
+                                }}
+                                className="hidden"
+                                accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+                              />
+
+                              {/* Emoji Picker */}
+                              <div className="relative">
+                                <EmojiPicker onEmojiSelect={(emoji) => insertEmoji(emoji)} />
+                              </div>
+
+                              {/* Text Input - WhatsApp Style */}
+                              <div className="flex-1 relative">
                                 <textarea
                                   ref={messageTextareaRef}
                                   id="normal-textarea"
-                                  placeholder="Type your message here... Use @ to mention someone"
+                                  placeholder="Type a message"
                                   value={newMessage}
                                   onChange={(e) => {
                                     setNewMessage(e.target.value);
                                     handleMentionInput(e.target.value, setNewMessage, messageTextareaRef);
+                                    // Auto-resize textarea
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                                   }}
                                   onKeyDown={handleMentionKeyDown}
-                                  className="w-full px-4 py-3 border-2 border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl focus:border-violet-500 dark:focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none resize-none transition-all duration-200"
-                                  rows={3}
-                                  disabled={sendingMessage}
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      handleSendMessage(e);
+                                    }
+                                  }}
+                                  rows={1}
+                                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-3xl bg-white dark:bg-[#2A3942] text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none transition-all text-sm sm:text-base resize-none overflow-y-auto border-0"
+                                  disabled={sendingMessage || ticket.status === 'closed' || ticket.status === 'resolved'}
+                                  style={{ 
+                                    minHeight: '44px',
+                                    maxHeight: '120px',
+                                    lineHeight: '1.4'
+                                  }}
                                 />
                               </div>
-                              <Button 
-                                type="submit" 
-                                disabled={(!newMessage.trim() && attachments.length === 0) || sendingMessage} 
-                                className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 h-fit disabled:opacity-50"
+
+                              {/* Send Button - WhatsApp Style */}
+                              <button
+                                type="submit"
+                                disabled={(!newMessage.trim() && !selectedFile) || sendingMessage || ticket.status === 'closed' || ticket.status === 'resolved'}
+                                className={`p-2.5 sm:p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 shadow-sm ${
+                                  (newMessage.trim() || selectedFile) && !sendingMessage
+                                    ? 'bg-[#25D366] hover:bg-[#20BA5A] text-white'
+                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                                }`}
                               >
                                 {sendingMessage ? (
-                                  <div className="flex items-center space-x-2">
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    <span>Sending...</span>
-                                  </div>
+                                  <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                                 ) : (
-                                  <div className="flex items-center space-x-2">
-                                    <SendIcon className="w-4 h-4" />
-                                    <span>Send</span>
-                                  </div>
+                                  <SendIcon className="w-5 h-5 sm:w-6 sm:h-6" />
                                 )}
-                              </Button>
+                              </button>
                             </div>
+                            {(ticket.status === 'closed' || ticket.status === 'resolved') && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 px-3 sm:px-4 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                                This ticket is {ticket.status}. You cannot send messages.
+                              </p>
+                            )}
                           </form>
                         </div>
                       </div>
@@ -4205,6 +4366,80 @@ export default function TicketViewPage() {
           </div>
         )}
       </AdminLayout>
+
+      {/* Image Viewer Modal */}
+      {viewingImage && typeof window !== 'undefined' && document.body && createPortal(
+        <div 
+          className="fixed inset-0 z-[10000] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setViewingImage(null)}
+        >
+          <button
+            onClick={() => setViewingImage(null)}
+            className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors z-10"
+          >
+            <XIcon className="w-6 h-6 text-white" />
+          </button>
+          <img 
+            src={viewingImage} 
+            alt="Full size preview" 
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>,
+        document.body
+      )}
+
+      {/* File Size Error Modal */}
+      {fileSizeError && typeof window !== 'undefined' && document.body && createPortal(
+        <div 
+          className="fixed inset-0 z-[10000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+          onClick={() => setFileSizeError(null)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-800 rounded-lg sm:rounded-xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 mx-2 sm:mx-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 flex-shrink-0" />
+                  <span>File Size Exceeded</span>
+                </h3>
+                <button
+                  onClick={() => setFileSizeError(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors flex-shrink-0"
+                >
+                  <XIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </div>
+              <div className="space-y-2 sm:space-y-3">
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                  The selected file is <span className="font-semibold text-slate-900 dark:text-white">{fileSizeError.fileSizeMB} MB</span>.
+                </p>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                  The allowed file size limit is <span className="font-semibold text-slate-900 dark:text-white">50 MB</span>.
+                </p>
+                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 sm:p-4 mt-3 sm:mt-4">
+                  <p className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Please try one of the following:</p>
+                  <ul className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc list-inside">
+                    <li>Compress the file to reduce its size</li>
+                    <li>Upload it on Google Drive and send the drive link</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="flex justify-end mt-4 sm:mt-6">
+                <Button
+                  onClick={() => setFileSizeError(null)}
+                  className="bg-violet-600 hover:bg-violet-700 text-white w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-2.5 text-sm sm:text-base"
+                >
+                  OK
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 }
