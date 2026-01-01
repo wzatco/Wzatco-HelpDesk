@@ -107,21 +107,6 @@ export default function KnowledgeBaseLanding() {
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto w-full">
             <div className="max-w-none mx-auto space-y-4 sm:space-y-6 p-4 sm:p-6 pb-8">
-              {/* Welcome 2026 Banner */}
-              <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 dark:from-emerald-600 dark:via-teal-600 dark:to-cyan-600 p-4 sm:p-6 shadow-lg border-2 border-emerald-400/50 dark:border-emerald-500/50">
-                <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent dark:from-black/20"></div>
-                <div className="relative z-10 text-center">
-                  <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white mb-2 drop-shadow-lg">
-                    <span className="bg-white/20 dark:bg-black/20 px-4 py-2 rounded-lg backdrop-blur-sm inline-block">
-                      Welcome <span className="text-yellow-300 dark:text-yellow-200 font-black">2026</span> <span className="text-emerald-100 dark:text-emerald-200 font-bold">TEST</span>
-                    </span>
-                  </h2>
-                  <p className="text-white/90 dark:text-white/80 text-sm sm:text-base font-medium">Happy New Year! 🎉</p>
-                </div>
-                <div className="absolute -top-5 -right-5 w-20 h-20 bg-white/20 rounded-full blur-xl"></div>
-                <div className="absolute -bottom-5 -left-5 w-16 h-16 bg-white/20 rounded-full blur-xl"></div>
-              </div>
-
               {/* Hero Section */}
               <div>
                 <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-violet-600 via-violet-700 to-purple-800 dark:from-violet-800 dark:via-violet-900 dark:to-purple-950 p-4 sm:p-6 md:p-8 text-white shadow-2xl">
