@@ -44,23 +44,6 @@ export default function LoginScreen({ onLogin }) {
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (!name.trim()) {
-      setError('Please enter your name');
-      return;
-    }
-
-    if (!email.trim() || !email.includes('@')) {
-      setError('Please enter a valid email address');
-      return;
-    }
-
-    onLogin(name.trim(), email.trim().toLowerCase());
-  };
-
   return (
     <div className="h-full flex flex-col bg-gray-900">
       {/* Header with Logo */}
