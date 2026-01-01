@@ -145,7 +145,7 @@ function SecuritySettingsPage() {
                         Admin Login Security
                       </label>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Enable security features for admin login (captcha, rate limiting, etc.)
+                        Enable security features for admin login (rate limiting, account lock, etc.)
                       </p>
                     </div>
                     <label className="flex items-center gap-3 cursor-pointer group">

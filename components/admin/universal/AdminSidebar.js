@@ -576,7 +576,6 @@ export default function AdminSidebar({ isOpen, onClose }) {
       hasSubmenu: true,
       submenu: [
         { name: 'Basic Settings', href: '/admin/settings/basic' },
-        { name: 'Captcha Settings', href: '/admin/settings/captcha' },
         { name: 'AI Settings', href: '/admin/settings/ai' },
         { name: 'File Upload Settings', href: '/admin/settings/file-upload' },
         { name: 'Ticket Settings', href: '/admin/settings/ticket' },

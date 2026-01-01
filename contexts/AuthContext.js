@@ -48,13 +48,13 @@ export function AuthProvider({ children }) {
     };
   }, []); // Empty deps - only run once
 
-  const login = async (email, password, captchaInput, captcha) => {
+  const login = async (email, password) => {
     try {
       const response = await fetch('/api/admin/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Important: Include cookies in request
-        body: JSON.stringify({ email, password, captchaInput, captcha })
+        body: JSON.stringify({ email, password })
       });
 
       const data = await response.json();

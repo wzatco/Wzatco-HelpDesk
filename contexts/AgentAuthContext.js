@@ -258,7 +258,7 @@ export function AgentAuthProvider({ children }) {
     setMessageToasts(prev => prev.filter(toast => toast.id !== toastId));
   };
 
-  const login = async (email, password, captchaInput = '', captcha = '') => {
+  const login = async (email, password) => {
     try {
       const response = await fetch('/api/agent/auth/login', {
         method: 'POST',
@@ -267,9 +267,7 @@ export function AgentAuthProvider({ children }) {
         },
         body: JSON.stringify({
           email,
-          password,
-          captchaInput,
-          captcha
+          password
         }),
       });
 

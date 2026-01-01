@@ -9,13 +9,9 @@ export default function AgentLoginPage() {
   const { login, isAuthenticated } = useAgentAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [captcha, setCaptcha] = useState('');
-  const [captchaInput, setCaptchaInput] = useState('');
-  const [captchaError, setCaptchaError] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [captchaEnabled, setCaptchaEnabled] = useState(true); // Default to enabled
 
   // Redirect if already authenticated (only once)
   useEffect(() => {
@@ -25,76 +21,7 @@ export default function AgentLoginPage() {
     }
   }, [isAuthenticated, router.query.redirect]);
 
-  // Fetch captcha settings and captcha only once on mount
-  useEffect(() => {
-    let mounted = true;
-    
-    const fetchData = async () => {
-      try {
-        // First fetch settings to check if CAPTCHA is enabled
-        const settingsRes = await fetch('/api/admin/settings/captcha');
-        
-        if (!mounted) return;
-        
-        const settingsData = await settingsRes.json();
-        let isEnabled = true; // Default to enabled
-        
-        if (settingsData.success && settingsData.settings?.enabledPlacements) {
-          // Check if agentLogin is enabled (fallback to adminLogin if agentLogin not set)
-          isEnabled = settingsData.settings.enabledPlacements.agentLogin === true || 
-                     (settingsData.settings.enabledPlacements.agentLogin === undefined && 
-                      settingsData.settings.enabledPlacements.adminLogin === true);
-        }
-        
-        setCaptchaEnabled(isEnabled);
-        
-        // Only fetch captcha if it's enabled
-        if (isEnabled) {
-          const captchaRes = await fetch('/api/admin/captcha/generate');
-          if (!mounted) return;
-          
-          const captchaData = await captchaRes.json();
-          if (captchaData.success) {
-            setCaptcha(captchaData.captcha);
-          }
-        } else {
-          // Clear captcha if disabled
-          setCaptcha('');
-          setCaptchaInput('');
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        if (mounted) {
-          // On error, default to enabled for security
-          setCaptchaEnabled(true);
-        }
-      }
-    };
-    
-    fetchData();
-    
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const fetchCaptcha = async () => {
-    try {
-      const res = await fetch('/api/admin/captcha/generate');
-      const data = await res.json();
-      if (data.success) {
-        setCaptcha(data.captcha);
-      }
-    } catch (error) {
-      console.error('Error fetching captcha:', error);
-    }
-  };
-
-  const refreshCaptcha = () => {
-    fetchCaptcha();
-    setCaptchaInput('');
-    setCaptchaError('');
-  };
+  // Captcha is permanently disabled
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -102,32 +29,11 @@ export default function AgentLoginPage() {
     // Clear all previous messages
     setError('');
     setSuccess('');
-    setCaptchaError('');
     setLoading(true);
 
-    // Validate captcha only if enabled
-    if (captchaEnabled) {
-      if (!captcha || !captcha.trim()) {
-        setCaptchaError('Captcha not loaded. Please refresh the page.');
-        setLoading(false);
-        return;
-      }
-      if (!captchaInput || captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
-        setCaptchaError('Invalid captcha. Please try again.');
-        refreshCaptcha();
-        setLoading(false);
-        return;
-      }
-    }
-
     try {
-      // Only pass captcha if enabled
-      const result = await login(
-        email, 
-        password, 
-        captchaEnabled ? captchaInput : '', 
-        captchaEnabled ? captcha : ''
-      );
+      // Login without captcha (captcha is disabled)
+      const result = await login(email, password, '', '');
       
       if (result.success) {
         setError(''); // Clear any errors
@@ -140,12 +46,10 @@ export default function AgentLoginPage() {
       } else {
         setLoading(false);
         setError(result.message || 'Login failed. Please try again.');
-        refreshCaptcha();
       }
     } catch (err) {
       setLoading(false);
       setError(err.message || 'An unexpected error occurred. Please try again.');
-      refreshCaptcha();
     }
   };
 
@@ -228,54 +132,6 @@ export default function AgentLoginPage() {
                   placeholder="Enter your password"
                 />
               </div>
-
-              {/* Captcha - Only show if enabled */}
-              {captchaEnabled && (
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                    Security Verification *
-                  </label>
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex-shrink-0 w-32 h-12 bg-gradient-to-r from-violet-100 to-purple-100 dark:from-slate-700 dark:to-slate-600 rounded-lg flex items-center justify-center border-2 border-violet-300 dark:border-slate-500">
-                      <span className="text-2xl font-bold text-violet-700 dark:text-violet-300 tracking-wider select-none">
-                        {captcha || '...'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={refreshCaptcha}
-                      disabled={loading}
-                      className="px-4 py-2 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Refresh captcha"
-                    >
-                      ↻ Refresh
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={captchaInput}
-                    onChange={(e) => {
-                      setCaptchaInput(e.target.value);
-                      setCaptchaError('');
-                      if (error) setError(''); // Also clear general error
-                    }}
-                    disabled={loading}
-                    placeholder="Enter the code above"
-                    className={`w-full h-12 px-4 rounded-lg border disabled:opacity-50 disabled:cursor-not-allowed ${
-                      captchaError 
-                        ? 'border-red-300 dark:border-red-700 focus:ring-red-500' 
-                        : 'border-slate-300 dark:border-slate-600 focus:ring-violet-500'
-                    } bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2`}
-                    required
-                  />
-                  {captchaError && (
-                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">{captchaError}</p>
-                  )}
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Please enter the code shown above to verify you're not a robot
-                  </p>
-                </div>
-              )}
 
               {/* Submit Button */}
               <button

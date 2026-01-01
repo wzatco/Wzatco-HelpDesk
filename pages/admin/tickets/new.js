@@ -36,9 +36,6 @@ export default function NewTicketPage() {
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState({ type: null, message: '' });
   const [existingTicketsPopup, setExistingTicketsPopup] = useState(null);
-  const [captcha, setCaptcha] = useState('');
-  const [captchaInput, setCaptchaInput] = useState('');
-  const [captchaError, setCaptchaError] = useState('');
   const [fileUploadSettings, setFileUploadSettings] = useState({
     maxUploadSize: 10,
     allowedFileTypes: [],
@@ -46,11 +43,6 @@ export default function NewTicketPage() {
   });
   const [ticketSettings, setTicketSettings] = useState({
     hidePriorityCustomer: false
-  });
-  const [captchaSettings, setCaptchaSettings] = useState({
-    enabledPlacements: {
-      customerTicket: false
-    }
   });
 
   const fileInputRef = useRef(null);
@@ -62,15 +54,13 @@ export default function NewTicketPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const [fileUploadRes, ticketRes, captchaRes] = await Promise.all([
+        const [fileUploadRes, ticketRes] = await Promise.all([
           fetch('/api/admin/settings/file-upload'),
-          fetch('/api/admin/settings/ticket'),
-          fetch('/api/admin/settings/captcha')
+          fetch('/api/admin/settings/ticket')
         ]);
 
         const fileUploadData = await fileUploadRes.json();
         const ticketData = await ticketRes.json();
-        const captchaData = await captchaRes.json();
 
         if (fileUploadData.success) {
           setFileUploadSettings({
@@ -84,10 +74,6 @@ export default function NewTicketPage() {
           setTicketSettings({
             hidePriorityCustomer: ticketData.settings.hidePriorityCustomer || false
           });
-        }
-
-        if (captchaData.success) {
-          setCaptchaSettings(captchaData.settings);
         }
       } catch (error) {
         console.error('Error fetching settings:', error);
@@ -129,13 +115,6 @@ export default function NewTicketPage() {
     fetchIssueCategories();
   }, []);
 
-  // Fetch captcha only if enabled
-  useEffect(() => {
-    if (captchaSettings.enabledPlacements?.customerTicket) {
-      fetchCaptcha();
-    }
-  }, [captchaSettings.enabledPlacements?.customerTicket]);
-
   const fetchTemplates = async () => {
     try {
       const res = await fetch('/api/admin/ticket-templates?activeOnly=true');
@@ -145,23 +124,6 @@ export default function NewTicketPage() {
       }
     } catch (error) {
       console.error('Error fetching templates:', error);
-    }
-  };
-
-  const fetchCaptcha = async () => {
-    try {
-      const res = await fetch('/api/admin/captcha/generate');
-      const data = await res.json();
-      if (data.success && data.captcha) {
-        setCaptcha(data.captcha);
-        setCaptchaError(''); // Clear any previous errors
-      } else {
-        console.error('Failed to generate captcha:', data);
-        setStatus({ type: 'error', message: 'Failed to load captcha. Please refresh the page.' });
-      }
-    } catch (error) {
-      console.error('Error fetching captcha:', error);
-      setStatus({ type: 'error', message: 'Failed to load captcha. Please refresh the page.' });
     }
   };
 
@@ -175,12 +137,6 @@ export default function NewTicketPage() {
     } catch (error) {
       console.error('Error fetching issue categories:', error);
     }
-  };
-
-  const refreshCaptcha = () => {
-    fetchCaptcha();
-    setCaptchaInput('');
-    setCaptchaError('');
   };
 
   // Filter accessories based on selected product
@@ -417,29 +373,6 @@ export default function NewTicketPage() {
       return;
     }
 
-    // Validate captcha only if enabled
-    if (captchaSettings.enabledPlacements?.customerTicket) {
-      if (!captcha || !captcha.trim()) {
-        setStatus({ type: 'error', message: 'Captcha not loaded. Please refresh the page.' });
-        setSubmitting(false);
-        return;
-      }
-
-      if (!captchaInput || !captchaInput.trim()) {
-        setCaptchaError('Please enter the captcha code');
-        setSubmitting(false);
-        return;
-      }
-
-      if (captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
-        setCaptchaError('Invalid captcha code. Please try again.');
-        setCaptchaInput('');
-        refreshCaptcha();
-        setSubmitting(false);
-        return;
-      }
-    }
-
     try {
       const allAttachments = [
         // Invoice attachment first (mandatory)
@@ -561,29 +494,6 @@ export default function NewTicketPage() {
       setStatus({ type: 'error', message: 'Invoice attachment is required' });
       setSubmitting(false);
       return;
-    }
-
-    // Validate captcha only if enabled
-    if (captchaSettings.enabledPlacements?.customerTicket) {
-      if (!captcha || !captcha.trim()) {
-        setStatus({ type: 'error', message: 'Captcha not loaded. Please refresh the page.' });
-        setSubmitting(false);
-        return;
-      }
-
-      if (!captchaInput || !captchaInput.trim()) {
-        setCaptchaError('Please enter the captcha code');
-        setSubmitting(false);
-        return;
-      }
-
-      if (captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
-        setCaptchaError('Invalid captcha code. Please try again.');
-        setCaptchaInput('');
-        refreshCaptcha();
-        setSubmitting(false);
-        return;
-      }
     }
 
     try {
@@ -1080,74 +990,6 @@ export default function NewTicketPage() {
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* Captcha - Only show if enabled */}
-              {captchaSettings.enabledPlacements?.customerTicket && (
-              <div className={`bg-white dark:bg-slate-800 rounded-2xl border shadow-sm p-6 ${captchaError
-                  ? 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/20'
-                  : 'border-violet-200 dark:border-slate-700'
-                }`}>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                  Security Verification * <span className="text-red-500">(Required)</span>
-                </label>
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 w-32 h-12 bg-gradient-to-r from-violet-100 to-purple-100 dark:from-slate-700 dark:to-slate-600 rounded-lg flex items-center justify-center border-2 border-violet-300 dark:border-slate-500">
-                        <span className="text-2xl font-bold text-violet-700 dark:text-violet-300 tracking-wider select-none">
-                          {captcha || '...'}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={refreshCaptcha}
-                        className="px-4 py-2 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 font-medium"
-                        title="Refresh captcha"
-                      >
-                        ↻ Refresh
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={captchaInput}
-                      onChange={(e) => {
-                        setCaptchaInput(e.target.value);
-                        setCaptchaError('');
-                      }}
-                      onBlur={() => {
-                        // Validate on blur if captcha is entered
-                        if (captchaInput && captcha && captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
-                          setCaptchaError('Invalid captcha code');
-                        }
-                      }}
-                      placeholder="Enter the code above"
-                      className={`w-full h-12 px-4 rounded-lg border ${captchaError
-                          ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
-                          : 'border-slate-300 dark:border-slate-600 focus:ring-violet-500'
-                        } bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2`}
-                      required
-                      autoComplete="off"
-                    />
-                    {captchaError && (
-                      <p className="text-sm text-red-600 dark:text-red-400 mt-1 font-medium">{captchaError}</p>
-                    )}
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                  Please enter the code shown above to verify you're not a robot. The code is case-insensitive.
-                </p>
-                {captchaError && (
-                  <div className="mt-3 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                    <p className="text-sm text-red-700 dark:text-red-300 font-medium flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" />
-                      {captchaError}
-                    </p>
-                  </div>
-                )}
-              </div>
               )}
 
               {/* Submit Button */}

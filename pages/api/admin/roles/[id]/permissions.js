@@ -28,7 +28,6 @@ const AVAILABLE_PAGES = [
   { name: 'admin.escalation-rules', label: 'Escalation Rules', category: '01. Admin Report' },
   { name: 'admin.settings', label: 'General Settings', category: '02. Admin Setting' },
   { name: 'admin.settings.basic', label: 'Basic Settings', category: '02. Admin Setting' },
-  { name: 'admin.settings.captcha', label: 'Captcha Settings', category: '02. Admin Setting' },
   { name: 'admin.settings.ai', label: 'AI Settings', category: '02. Admin Setting' },
   { name: 'admin.settings.file-upload', label: 'File Upload Settings', category: '02. Admin Setting' },
   { name: 'admin.settings.ticket', label: 'Ticket Settings', category: '02. Admin Setting' },

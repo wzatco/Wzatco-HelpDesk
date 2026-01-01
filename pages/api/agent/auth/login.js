@@ -1,6 +1,5 @@
 import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
-import { getSecuritySettings, getCaptchaSettings } from '../../../../lib/settings';
-import { validateCaptcha } from '../../../../lib/captcha';
+import { getSecuritySettings } from '../../../../lib/settings';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -34,7 +33,7 @@ export default async function handler(req, res) {
 
   try {
     await ensurePrismaConnected();
-    const { email, password, captchaInput, captcha } = req.body;
+    const { email, password } = req.body;
     const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
 
     // Get security settings (with fallback if database fails)
@@ -51,19 +50,6 @@ export default async function handler(req, res) {
         accountLockAttempts: 5,
         accountLockMinutes: 15
       };
-    }
-
-    // Get captcha settings (with fallback if database fails)
-    let captchaSettings;
-    let captchaEnabledForAgentLogin = false;
-    try {
-      captchaSettings = await getCaptchaSettings();
-      // Explicitly check if agentLogin is true (not just not false)
-      captchaEnabledForAgentLogin = captchaSettings.enabledPlacements?.agentLogin === true;
-    } catch (error) {
-      console.error('Error fetching captcha settings:', error);
-      // Default to disabled if database query fails
-      captchaEnabledForAgentLogin = false;
     }
 
     // Check if admin login security is enabled
@@ -96,25 +82,6 @@ export default async function handler(req, res) {
           requestRateLimit.set(clientIp, {
             count: 1,
             resetAt: new Date(now.getTime() + 60 * 1000)
-          });
-        }
-      }
-
-      // Validate captcha if enabled for agent login
-      if (captchaEnabledForAgentLogin) {
-        if (captchaInput && captcha) {
-          const isValidCaptcha = validateCaptcha(captchaInput, captcha);
-          if (!isValidCaptcha) {
-            return res.status(400).json({
-              success: false,
-              message: 'Invalid captcha. Please try again.'
-            });
-          }
-        } else {
-          // Captcha is enabled but not provided
-          return res.status(400).json({
-            success: false,
-            message: 'Captcha is required for login.'
           });
         }
       }
