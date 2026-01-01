@@ -1,5 +1,5 @@
 // Widget API - Create ticket with all form fields
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import formidable from 'formidable';
 import fs from 'fs';
 import path from 'path';
@@ -10,14 +10,6 @@ export const config = {
     bodyParser: false,
   },
 };
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
   }
   prisma = global.prisma;
 }
@@ -47,6 +39,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensurePrismaConnected();
     // Parse form data (handles both regular fields and file uploads)
     const form = formidable({
       uploadDir: path.join(process.cwd(), 'public', 'uploads', 'tickets'),

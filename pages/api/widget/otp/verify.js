@@ -1,17 +1,6 @@
 // Widget API - Verify OTP for email verification
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -21,6 +10,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensurePrismaConnected();
     const { email, otp } = req.body;
 
     if (!email || !otp) {

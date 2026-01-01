@@ -1,20 +1,10 @@
 // Widget API - Fetch single ticket with messages
-import { PrismaClient } from '@prisma/client';
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
+      await ensurePrismaConnected();
       const { id } = req.query;
       const { email } = req.query;
 
