@@ -1,7 +1,10 @@
-import SLAService from '../../../../lib/sla-service';
+import { SLAService } from '../../../../lib/sla-service';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 /**
  * SLA Actions Endpoint

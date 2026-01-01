@@ -61,6 +61,7 @@ export default async function handler(req, res) {
         id: article.id,
         title: article.title,
         content: article.content,
+        contentType: article.contentType,
         slug: article.slug,
         category: article.category ? {
           id: article.category.id,

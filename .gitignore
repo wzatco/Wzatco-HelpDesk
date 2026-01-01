@@ -3,28 +3,3 @@ node_modules/
 .env.local
 .env
 .DS_Store
-
-# Nested git repositories
-Wzatcowidget/
-
-# Test and demo files
-*-demo.js
-test-*.js
-test-*.html
-TEST_*.md
-*.test.js
-
-# Upload directories
-public/uploads/
-uploads/
-
-# Database files (SQLite for local dev only - not for production)
-*.db
-*.db-journal
-prisma/dev.db
-prisma/prisma/dev.db
-
-# Temporary documentation (keep README.md)
-*.md
-!README.md
-!CHANGELOG.md

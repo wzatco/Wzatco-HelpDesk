@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -15,10 +18,14 @@ export default async function handler(req, res) {
     if (startDate || endDate) {
       dateFilter.submittedAt = {};
       if (startDate) {
-        dateFilter.submittedAt.gte = new Date(startDate);
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0); // Start of day
+        dateFilter.submittedAt.gte = start;
       }
       if (endDate) {
-        dateFilter.submittedAt.lte = new Date(endDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // End of day
+        dateFilter.submittedAt.lte = end;
       }
     }
 
@@ -26,15 +33,23 @@ export default async function handler(req, res) {
     const feedbacks = await prisma.feedback.findMany({
       where: dateFilter,
       include: {
-        Conversation: {
-          include: {
-            assignee: {
+        agent: {
+          select: {
+            id: true,
+            name: true,
+            department: {
               select: {
                 id: true,
-                name: true,
-                department: true
+                name: true
               }
             }
+          }
+        },
+        Conversation: {
+          select: {
+            ticketNumber: true,
+            subject: true,
+            assigneeId: true
           }
         }
       },
@@ -65,12 +80,12 @@ export default async function handler(req, res) {
       ? Math.round((positiveRatings / totalFeedbacks) * 100)
       : 0;
 
-    // Agent-wise CSAT
+    // Agent-wise CSAT (using agent relation from Feedback - Resolver Takes Credit)
     const agentCSAT = {};
     feedbacks.forEach(feedback => {
-      const agentId = feedback.Conversation?.assigneeId;
-      const agentName = feedback.Conversation?.assignee?.name || 'Unassigned';
-      const department = feedback.Conversation?.assignee?.department || 'N/A';
+      const agentId = feedback.agentId;
+      const agentName = feedback.agent?.name || 'Unassigned';
+      const department = feedback.agent?.department?.name || 'N/A';
       
       if (!agentCSAT[agentId || 'unassigned']) {
         agentCSAT[agentId || 'unassigned'] = {
@@ -106,10 +121,10 @@ export default async function handler(req, res) {
       };
     });
 
-    // Department-wise CSAT
+    // Department-wise CSAT (using agent relation from Feedback)
     const departmentCSAT = {};
     feedbacks.forEach(feedback => {
-      const department = feedback.Conversation?.assignee?.department || 'Unassigned';
+      const department = feedback.agent?.department?.name || 'Unassigned';
       
       if (!departmentCSAT[department]) {
         departmentCSAT[department] = {
@@ -143,33 +158,43 @@ export default async function handler(req, res) {
       };
     });
 
-    // Detailed feedback list
-    const detailedFeedbacks = feedbacks.map(feedback => ({
+    // Recent feedback list (last 5 records)
+    const recentFeedbacks = feedbacks.slice(0, 5).map(feedback => ({
       id: feedback.id,
       ticketId: feedback.conversationId,
       rating: feedback.rating,
       comment: feedback.comment,
       customerName: feedback.customerName || 'Anonymous',
-      agentName: feedback.Conversation?.assignee?.name || 'Unassigned',
-      department: feedback.Conversation?.assignee?.department || 'N/A',
+      agentName: feedback.agent?.name || 'Unassigned',
+      department: feedback.agent?.department?.name || 'N/A',
       submittedAt: feedback.submittedAt,
       subject: feedback.Conversation?.subject || 'N/A'
     }));
 
-    return res.status(200).json({
+    // Always return a valid structure, even with 0 feedbacks
+    const response = {
       success: true,
       data: {
         summary: {
-          totalFeedbacks,
-          averageRating,
-          csatScore,
-          ratingDistribution
+          totalFeedbacks: totalFeedbacks || 0,
+          averageRating: averageRating || 0,
+          csatScore: csatScore || 0,
+          ratingDistribution: ratingDistribution || { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
         },
-        agentMetrics,
-        departmentMetrics,
-        detailedFeedbacks: detailedFeedbacks.slice(0, 100) // Limit to 100 most recent
+        agentMetrics: agentMetrics || [],
+        departmentMetrics: departmentMetrics || [],
+        recentFeedbacks: recentFeedbacks || [] // Last 5 recent feedbacks
       }
+    };
+
+    console.log('📊 CSAT API Response:', {
+      totalFeedbacks,
+      averageRating,
+      csatScore,
+      recentCount: recentFeedbacks.length
     });
+
+    return res.status(200).json(response);
   } catch (error) {
     console.error('Error fetching CSAT report:', error);
     return res.status(500).json({ 
@@ -177,8 +202,6 @@ export default async function handler(req, res) {
       message: 'Error fetching CSAT report',
       error: error.message 
     });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

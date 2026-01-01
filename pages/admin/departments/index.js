@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -9,13 +9,14 @@ import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Input } from '../../../components/ui/input';
 import { withAuth } from '../../../lib/withAuth';
-import { 
-  Building2, 
-  Plus, 
-  Search as SearchIcon, 
+import {
+  Building2,
+  Plus,
+  Search as SearchIcon,
   Edit,
   Trash2,
   Users,
+  User,
   Ticket as TicketIcon,
   Clock,
   Calendar,
@@ -30,31 +31,31 @@ import {
 // SLA & Working Hours Configuration Component
 function SLAWorkingHoursConfig({ departmentId, departmentData, onUpdate }) {
   const [slaConfig, setSlaConfig] = useState({
-    low: { 
-      responseTime: 4, 
-      responseTimeUnit: 'hours', 
-      resolutionTime: 2, 
+    low: {
+      responseTime: 4,
+      responseTimeUnit: 'hours',
+      resolutionTime: 2,
       resolutionTimeUnit: 'days',
       useBusinessHours: true
     },
-    medium: { 
-      responseTime: 2, 
-      responseTimeUnit: 'hours', 
-      resolutionTime: 1, 
+    medium: {
+      responseTime: 2,
+      responseTimeUnit: 'hours',
+      resolutionTime: 1,
       resolutionTimeUnit: 'days',
       useBusinessHours: true
     },
-    high: { 
-      responseTime: 1, 
-      responseTimeUnit: 'hours', 
-      resolutionTime: 8, 
+    high: {
+      responseTime: 1,
+      responseTimeUnit: 'hours',
+      resolutionTime: 8,
       resolutionTimeUnit: 'hours',
       useBusinessHours: true
     },
-    urgent: { 
-      responseTime: 15, 
-      responseTimeUnit: 'minutes', 
-      resolutionTime: 4, 
+    urgent: {
+      responseTime: 15,
+      responseTimeUnit: 'minutes',
+      resolutionTime: 4,
       resolutionTimeUnit: 'hours',
       useBusinessHours: true
     }
@@ -85,7 +86,7 @@ function SLAWorkingHoursConfig({ departmentId, departmentData, onUpdate }) {
           high: { responseTime: 1, responseTimeUnit: 'hours', resolutionTime: 8, resolutionTimeUnit: 'hours', useBusinessHours: true },
           urgent: { responseTime: 15, responseTimeUnit: 'minutes', resolutionTime: 4, resolutionTimeUnit: 'hours', useBusinessHours: true }
         };
-        
+
         ['low', 'medium', 'high', 'urgent'].forEach(priority => {
           if (config[priority]) {
             if (typeof config[priority] === 'object' && config[priority].responseTimeUnit) {
@@ -182,7 +183,8 @@ function SLAWorkingHoursConfig({ departmentId, departmentData, onUpdate }) {
   return (
     <div className="space-y-6">
       {/* Dark mode styles for time/date input icons */}
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         html.dark input[type="date"]::-webkit-calendar-picker-indicator,
         html.dark input[type="date"]::-webkit-inner-spin-button,
         html.dark input[type="date"]::-webkit-clear-button,
@@ -243,9 +245,9 @@ function SLAWorkingHoursConfig({ departmentId, departmentData, onUpdate }) {
         }
       `}} />
       {/* Notification Toast */}
-      <NotificationToast 
-        notification={notification} 
-        onClose={() => setNotification({ type: null, message: '' })} 
+      <NotificationToast
+        notification={notification}
+        onClose={() => setNotification({ type: null, message: '' })}
       />
 
       {/* SLA Configuration */}
@@ -337,11 +339,10 @@ function SLAWorkingHoursConfig({ departmentId, departmentData, onUpdate }) {
                       })}
                       className="sr-only"
                     />
-                    <div className={`w-4 h-4 rounded border-2 transition-all duration-200 flex items-center justify-center ${
-                      slaConfig[priority]?.useBusinessHours !== false
-                        ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30' 
-                        : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
-                    }`}>
+                    <div className={`w-4 h-4 rounded border-2 transition-all duration-200 flex items-center justify-center ${slaConfig[priority]?.useBusinessHours !== false
+                      ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30'
+                      : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
+                      }`}>
                       {slaConfig[priority]?.useBusinessHours !== false && (
                         <svg className="w-3 h-3 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
                           <path d="M5 13l4 4L19 7"></path>
@@ -380,11 +381,10 @@ function SLAWorkingHoursConfig({ departmentId, departmentData, onUpdate }) {
                       })}
                       className="sr-only"
                     />
-                    <div className={`w-4 h-4 rounded border-2 transition-all duration-200 flex items-center justify-center ${
-                      workingHours[day.key]?.enabled
-                        ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30' 
-                        : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
-                    }`}>
+                    <div className={`w-4 h-4 rounded border-2 transition-all duration-200 flex items-center justify-center ${workingHours[day.key]?.enabled
+                      ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30'
+                      : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
+                      }`}>
                       {workingHours[day.key]?.enabled && (
                         <svg className="w-3 h-3 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
                           <path d="M5 13l4 4L19 7"></path>
@@ -552,6 +552,7 @@ function SLAWorkingHoursConfig({ departmentId, departmentData, onUpdate }) {
 export default function DepartmentsPage() {
   const router = useRouter();
   const [departments, setDepartments] = useState([]);
+  const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -561,18 +562,19 @@ export default function DepartmentsPage() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    departmentHeadId: '',
     isActive: true
   });
   const [submitting, setSubmitting] = useState(false);
   const [notification, setNotification] = useState({ type: null, message: '' });
-  const [activeTab, setActiveTab] = useState('list'); // 'list' or department ID
-  const [openTabs, setOpenTabs] = useState([]); // Array of { id, name, data }
-  const [loadingDetails, setLoadingDetails] = useState({}); // Map of department ID to loading state
   const [isMounted, setIsMounted] = useState(false);
+  const [showHeadDropdown, setShowHeadDropdown] = useState(false);
+  const [headSearchQuery, setHeadSearchQuery] = useState('');
 
   useEffect(() => {
     setIsMounted(true);
     fetchDepartments();
+    fetchAgents();
   }, []);
 
   const fetchDepartments = async () => {
@@ -580,7 +582,7 @@ export default function DepartmentsPage() {
       setLoading(true);
       const response = await fetch('/api/admin/departments?includeStats=true');
       const data = await response.json();
-      
+
       if (response.ok) {
         setDepartments(data.departments || []);
       } else {
@@ -594,55 +596,19 @@ export default function DepartmentsPage() {
     }
   };
 
-  const fetchDepartmentDetails = async (id, openNewTab = false) => {
-    // Check if tab already exists
-    const existingTab = openTabs.find(tab => tab.id === id);
-    if (existingTab && !openNewTab) {
-      setActiveTab(id);
-      return;
-    }
-
+  const fetchAgents = async () => {
     try {
-      setLoadingDetails(prev => ({ ...prev, [id]: true }));
-      const response = await fetch(`/api/admin/departments/${id}?includeAgents=true&includeStats=true`);
+      const response = await fetch('/api/admin/agents');
       const data = await response.json();
-      
+
       if (response.ok) {
-        const department = data.department;
-        // Add or update tab
-        setOpenTabs(prev => {
-          const existingIndex = prev.findIndex(tab => tab.id === id);
-          if (existingIndex >= 0) {
-            // Update existing tab
-            const updated = [...prev];
-            updated[existingIndex] = { id, name: department.name, data: department };
-            return updated;
-          } else {
-            // Add new tab
-            return [...prev, { id, name: department.name, data: department }];
-          }
-        });
-        setActiveTab(id);
-      } else {
-        showNotification('error', data.message || 'Failed to fetch department details');
+        setAgents(data.agents || []);
       }
     } catch (error) {
-      console.error('Error fetching department details:', error);
-      showNotification('error', 'An error occurred while fetching department details');
-    } finally {
-      setLoadingDetails(prev => ({ ...prev, [id]: false }));
+      console.error('Error fetching agents:', error);
     }
   };
 
-  const closeTab = (tabId, e) => {
-    e.stopPropagation();
-    setOpenTabs(prev => prev.filter(tab => tab.id !== tabId));
-    // If closing active tab, switch to list or another tab
-    if (activeTab === tabId) {
-      const remainingTabs = openTabs.filter(tab => tab.id !== tabId);
-      setActiveTab(remainingTabs.length > 0 ? remainingTabs[remainingTabs.length - 1].id : 'list');
-    }
-  };
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
@@ -666,6 +632,7 @@ export default function DepartmentsPage() {
         body: JSON.stringify({
           name: formData.name.trim(),
           description: formData.description.trim() || null,
+          departmentHeadId: formData.departmentHeadId || null,
           isActive: formData.isActive
         })
       });
@@ -675,15 +642,15 @@ export default function DepartmentsPage() {
       if (response.ok) {
         showNotification('success', 'Department created successfully');
         setShowAddModal(false);
-        setFormData({ name: '', description: '', isActive: true });
+        setFormData({ name: '', description: '', departmentHeadId: '', isActive: true });
         await fetchDepartments();
         // Notify sidebar to refresh departments
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('departmentUpdated'));
         }
-        // Automatically open tab for newly created department
+        // Navigate to the newly created department page
         if (data.department && data.department.id) {
-          await fetchDepartmentDetails(data.department.id, true);
+          router.push(`/admin/departments/${data.department.id}`);
         }
       } else {
         showNotification('error', data.message || 'Failed to create department');
@@ -713,6 +680,7 @@ export default function DepartmentsPage() {
         body: JSON.stringify({
           name: formData.name.trim(),
           description: formData.description.trim() || null,
+          departmentHeadId: formData.departmentHeadId || null,
           isActive: formData.isActive
         })
       });
@@ -723,17 +691,14 @@ export default function DepartmentsPage() {
         showNotification('success', 'Department updated successfully');
         setShowEditModal(false);
         setSelectedDepartment(null);
-        setFormData({ name: '', description: '', isActive: true });
+        setFormData({ name: '', description: '', departmentHeadId: '', isActive: true });
         await fetchDepartments();
         // Notify sidebar to refresh departments
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('departmentUpdated'));
         }
-        // Update the tab if it's open
-        const tabIndex = openTabs.findIndex(tab => tab.id === selectedDepartment.id);
-        if (tabIndex >= 0) {
-          await fetchDepartmentDetails(selectedDepartment.id, true);
-        }
+        // Navigate to the updated department page
+        router.push(`/admin/departments/${selectedDepartment.id}`);
       } else {
         showNotification('error', data.message || 'Failed to update department');
       }
@@ -764,16 +729,6 @@ export default function DepartmentsPage() {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('departmentUpdated'));
         }
-        // Close tab if it was open
-        const tabToClose = openTabs.find(tab => tab.id === deletedId);
-        if (tabToClose) {
-          setOpenTabs(prev => prev.filter(tab => tab.id !== deletedId));
-          // If closing active tab, switch to list or another tab
-          if (activeTab === deletedId) {
-            const remainingTabs = openTabs.filter(tab => tab.id !== deletedId);
-            setActiveTab(remainingTabs.length > 0 ? remainingTabs[remainingTabs.length - 1].id : 'list');
-          }
-        }
       } else {
         showNotification('error', data.message || 'Failed to delete department');
       }
@@ -790,6 +745,7 @@ export default function DepartmentsPage() {
     setFormData({
       name: dept.name,
       description: dept.description || '',
+      departmentHeadId: dept.departmentHeadId || '',
       isActive: dept.isActive
     });
     setShowEditModal(true);
@@ -802,7 +758,7 @@ export default function DepartmentsPage() {
 
   const filteredDepartments = departments.filter(dept => {
     const matchesSearch = dept.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (dept.description && dept.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      (dept.description && dept.description.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesSearch;
   });
 
@@ -834,9 +790,9 @@ export default function DepartmentsPage() {
                   <p className="text-violet-100 dark:text-violet-200 text-base sm:text-lg">Manage departments, teams, and routing rules</p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <Button 
+                  <Button
                     onClick={() => {
-                      setFormData({ name: '', description: '', isActive: true });
+                      setFormData({ name: '', description: '', departmentHeadId: '', isActive: true });
                       setShowAddModal(true);
                     }}
                     className="bg-white text-violet-700 hover:bg-violet-50 dark:bg-white dark:text-violet-800 dark:hover:bg-violet-100 px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 font-semibold"
@@ -852,309 +808,146 @@ export default function DepartmentsPage() {
           </div>
 
           {/* Notification Toast */}
-          <NotificationToast 
-            notification={notification} 
-            onClose={() => setNotification({ type: null, message: '' })} 
+          <NotificationToast
+            notification={notification}
+            onClose={() => setNotification({ type: null, message: '' })}
           />
 
-          {/* Tabs */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-2">
-            <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('list')}
-            className={`px-4 py-2 font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-              activeTab === 'list'
-                ? 'text-violet-600 dark:text-violet-400 border-b-2 border-violet-600 dark:border-violet-400'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            All Departments
-          </button>
-          {openTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 font-medium transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-2 ${
-                activeTab === tab.id
-                  ? 'text-violet-600 dark:text-violet-400 border-b-2 border-violet-600 dark:border-violet-400'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <span>{tab.name}</span>
-              <button
-                onClick={(e) => closeTab(tab.id, e)}
-                className="hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full p-0.5 transition-colors"
-                title="Close tab"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </button>
-            ))}
-            </div>
-          </div>
-
-          {/* List View */}
-          {activeTab === 'list' && (
-            <>
-              {/* Search & Filter Section */}
-              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6">
-                <div className="relative">
-                  <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-5 h-5" />
-                  <Input
-                    type="text"
-                    placeholder="Search departments by name or description..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 w-full h-11 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  />
-                </div>
+          {/* Departments List */}
+          <div>
+            {/* Search & Filter Section */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6">
+              <div className="relative">
+                <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-5 h-5" />
+                <Input
+                  type="text"
+                  placeholder="Search departments by name or description..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-full h-11 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                />
               </div>
+            </div>
 
-              {/* Departments Grid */}
-              {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6 animate-pulse">
-                      <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-3/4 mb-4"></div>
-                      <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full mb-2"></div>
-                      <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-2/3"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : filteredDepartments.length === 0 ? (
-                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-12 text-center">
-                  <Building2 className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-                    No departments found
-                  </h3>
-                  <p className="text-slate-600 dark:text-slate-400 mb-4">
-                    {searchQuery ? 'Try adjusting your search query' : 'Get started by creating your first department'}
-                  </p>
-                  {!searchQuery && (
-                    <Button
-                      onClick={() => {
-                        setFormData({ name: '', description: '', isActive: true });
-                        setShowAddModal(true);
-                      }}
-                      className="bg-violet-600 hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500 text-white shadow-md hover:shadow-lg transition-all"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Department
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredDepartments.map((dept) => (
-                    <div
-                      key={dept.id} 
-                      className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6 hover:shadow-lg transition-all cursor-pointer group"
-                      onClick={() => fetchDepartmentDetails(dept.id)}
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Building2 className="w-5 h-5 text-violet-600 dark:text-violet-400" />
-                            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                              {dept.name}
-                            </h3>
-                          </div>
-                          {dept.description && (
-                            <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
-                              {dept.description}
-                            </p>
-                          )}
-                        </div>
-                        <Badge className={`${dept.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'} border-0`}>
-                          {dept.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </div>
-
-                      {dept.stats && (
-                        <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                          <div>
-                            <div className="text-2xl font-bold text-slate-900 dark:text-white">
-                              {dept.stats.total}
-                            </div>
-                            <div className="text-xs text-slate-600 dark:text-slate-400">Total Tickets</div>
-                          </div>
-                          <div>
-                            <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                              {dept.stats.open}
-                            </div>
-                            <div className="text-xs text-slate-600 dark:text-slate-400">Open</div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditModal(dept);
-                          }}
-                          className="text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 flex items-center gap-1 text-sm font-medium transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeleteModal(dept);
-                          }}
-                          className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex items-center gap-1 text-sm font-medium transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Details View */}
-          {activeTab !== 'list' && (() => {
-            const currentTab = openTabs.find(tab => tab.id === activeTab);
-            if (!currentTab) return null;
-            const departmentDetails = currentTab.data;
-            const isLoading = loadingDetails[activeTab];
-            
-            return (
-              <div className="space-y-6">
-                {isLoading ? (
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-12 text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600 mx-auto"></div>
+            {/* Departments Grid */}
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6 animate-pulse">
+                    <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-3/4 mb-4"></div>
+                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full mb-2"></div>
+                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-2/3"></div>
                   </div>
-                ) : (
-                  <>
-                    {/* Department Info */}
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6">
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-3">
-                          <Building2 className="w-6 h-6 text-violet-600 dark:text-violet-400" />
-                          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-                            {departmentDetails.name}
-                          </h2>
-                        </div>
-                        <Badge className={`${departmentDetails.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'} border-0`}>
-                          {departmentDetails.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </div>
-                      <div className="space-y-4">
-                    {departmentDetails.description && (
-                      <div>
-                        <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">Description</label>
-                        <p className="text-slate-900 dark:text-white mt-1">{departmentDetails.description}</p>
-                      </div>
-                    )}
-                    
-                    {departmentDetails.stats && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <div>
-                          <div className="text-3xl font-bold text-slate-900 dark:text-white">
-                            {departmentDetails.stats.total}
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-400">Total Tickets</div>
-                        </div>
-                        <div>
-                          <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-                            {departmentDetails.stats.open}
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-400">Open</div>
-                        </div>
-                        <div>
-                          <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                            {departmentDetails.stats.pending}
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-400">Pending</div>
-                        </div>
-                        <div>
-                          <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                            {departmentDetails.stats.resolved}
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-400">Resolved</div>
-                        </div>
-                      </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Agents */}
-                  <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6">
-                    <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-200 dark:border-slate-700">
-                      <Users className="w-5 h-5 text-violet-600 dark:text-violet-400" />
-                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                        Agents ({departmentDetails.agents?.length || 0})
-                      </h3>
-                    </div>
-                    <div>
-                    {departmentDetails.agents && departmentDetails.agents.length > 0 ? (
-                      <div className="space-y-2">
-                        {departmentDetails.agents.map((agent) => (
-                          <div key={agent.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold">
-                                {agent.name.charAt(0)}
-                              </div>
-                              <div>
-                                <div className="font-medium text-slate-900 dark:text-white">{agent.name}</div>
-                                {agent.email && (
-                                  <div className="text-sm text-slate-600 dark:text-slate-400">{agent.email}</div>
-                                )}
-                              </div>
-                            </div>
-                            <Badge className={agent.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}>
-                              {agent.isActive ? 'Active' : 'Inactive'}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-slate-600 dark:text-slate-400 text-center py-8">
-                        No agents assigned to this department
-                      </p>
-                    )}
-                    </div>
-                  </div>
-
-                    {/* SLA & Working Hours Configuration */}
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6">
-                      <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-200 dark:border-slate-700">
-                        <Settings className="w-5 h-5 text-violet-600 dark:text-violet-400" />
-                        <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                          SLA & Working Hours Configuration
-                        </h3>
-                      </div>
-                      <SLAWorkingHoursConfig 
-                        departmentId={activeTab}
-                        departmentData={departmentDetails}
-                        onUpdate={fetchDepartmentDetails}
-                      />
-                    </div>
-                  </>
+                ))}
+              </div>
+            ) : filteredDepartments.length === 0 ? (
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-12 text-center">
+                <Building2 className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                  No departments found
+                </h3>
+                <p className="text-slate-600 dark:text-slate-400 mb-4">
+                  {searchQuery ? 'Try adjusting your search query' : 'Get started by creating your first department'}
+                </p>
+                {!searchQuery && (
+                  <Button
+                    onClick={() => {
+                      setFormData({ name: '', description: '', departmentHeadId: '', isActive: true });
+                      setShowAddModal(true);
+                    }}
+                    className="bg-violet-600 hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500 text-white shadow-md hover:shadow-lg transition-all"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Department
+                  </Button>
                 )}
               </div>
-            );
-          })()}
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredDepartments.map((dept) => (
+                  <div
+                    key={dept.id}
+                    className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6 hover:shadow-lg transition-all cursor-pointer group"
+                    onClick={() => router.push(`/admin/departments/${dept.id}`)}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Building2 className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                            {dept.name}
+                          </h3>
+                        </div>
+                        {dept.description && (
+                          <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
+                            {dept.description}
+                          </p>
+                        )}
+                      </div>
+                      <Badge className={`${dept.isActive ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'} border-0`}>
+                        {dept.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+
+                    {dept.stats && (
+                      <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <div>
+                          <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                            {dept.stats.total}
+                          </div>
+                          <div className="text-xs text-slate-600 dark:text-slate-400">Total Tickets</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                            {dept.stats.open}
+                          </div>
+                          <div className="text-xs text-slate-600 dark:text-slate-400">Open</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(dept);
+                        }}
+                        className="text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 flex items-center gap-1 text-sm font-medium transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDeleteModal(dept);
+                        }}
+                        className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex items-center gap-1 text-sm font-medium transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Add Modal */}
       {isMounted && typeof window !== 'undefined' && document.body && showAddModal && createPortal(
-        <div 
+        <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setShowAddModal(false);
-              setFormData({ name: '', description: '', isActive: true });
+              setFormData({ name: '', description: '', departmentHeadId: '', isActive: true });
             }
           }}
         >
-          <div 
+          <div
             className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-violet-200 dark:border-slate-700 max-w-md w-full max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1163,14 +956,14 @@ export default function DepartmentsPage() {
               <button
                 onClick={() => {
                   setShowAddModal(false);
-                  setFormData({ name: '', description: '', isActive: true });
+                  setFormData({ name: '', description: '', departmentHeadId: '', isActive: true });
                 }}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <form onSubmit={handleAddDepartment} className="p-6 space-y-6">
               {/* Department Information */}
               <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-sm p-6">
@@ -1178,7 +971,7 @@ export default function DepartmentsPage() {
                   <Building2 className="w-5 h-5 text-violet-600" />
                   Department Information
                 </h3>
-                
+
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
@@ -1194,7 +987,7 @@ export default function DepartmentsPage() {
                       placeholder="e.g., Technical Support, Customer Service"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                       Description
@@ -1207,6 +1000,132 @@ export default function DepartmentsPage() {
                       className="w-full px-4 py-3 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
                     />
                   </div>
+
+                  {/* Department Head */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Department Head
+                    </label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowHeadDropdown(!showHeadDropdown)}
+                        className="w-full h-11 px-4 rounded-xl border-2 border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent flex items-center justify-between hover:border-violet-300 dark:hover:border-slate-600 transition-colors"
+                      >
+                        <span className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                          <span className={formData.departmentHeadId ? 'text-slate-900 dark:text-white' : 'text-slate-400'}>
+                            {formData.departmentHeadId
+                              ? agents.find(a => a.id === formData.departmentHeadId)?.name || 'No head assigned'
+                              : 'Select department head'}
+                          </span>
+                        </span>
+                        <svg className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${showHeadDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {showHeadDropdown && (
+                        <>
+                          {/* Backdrop */}
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setShowHeadDropdown(false)}
+                          />
+
+                          {/* Dropdown */}
+                          <div className="absolute z-20 w-full mt-2 bg-white dark:bg-slate-800 border-2 border-violet-200 dark:border-slate-700 rounded-xl shadow-xl max-h-80 overflow-hidden">
+                            {/* Search */}
+                            <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+                              <div className="relative">
+                                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                  type="text"
+                                  value={headSearchQuery}
+                                  onChange={(e) => setHeadSearchQuery(e.target.value)}
+                                  placeholder="Search agents..."
+                                  className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Options */}
+                            <div className="max-h-60 overflow-y-auto">
+                              {/* No head option */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData({ ...formData, departmentHeadId: '' });
+                                  setShowHeadDropdown(false);
+                                  setHeadSearchQuery('');
+                                }}
+                                className={`w-full px-4 py-3 text-left hover:bg-violet-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-3 ${!formData.departmentHeadId ? 'bg-violet-50 dark:bg-slate-700' : ''
+                                  }`}
+                              >
+                                <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                                  <User className="w-4 h-4 text-slate-400" />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-sm font-medium text-slate-700 dark:text-slate-300">No head assigned</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">Department will have no head</div>
+                                </div>
+                                {!formData.departmentHeadId && (
+                                  <CheckCircle2 className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                                )}
+                              </button>
+
+                              {/* Admin options */}
+                              {agents
+                                .filter(agent =>
+                                  !headSearchQuery ||
+                                  agent.name.toLowerCase().includes(headSearchQuery.toLowerCase()) ||
+                                  agent.email?.toLowerCase().includes(headSearchQuery.toLowerCase())
+                                )
+                                .map(agent => (
+                                  <button
+                                    key={agent.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData({ ...formData, departmentHeadId: agent.id });
+                                      setShowHeadDropdown(false);
+                                      setHeadSearchQuery('');
+                                    }}
+                                    className={`w-full px-4 py-3 text-left hover:bg-violet-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-3 ${formData.departmentHeadId === agent.id ? 'bg-violet-50 dark:bg-slate-700' : ''
+                                      }`}
+                                  >
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                                      {agent.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium text-slate-900 dark:text-white truncate">{agent.name}</div>
+                                      {agent.email && (
+                                        <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{agent.email}</div>
+                                      )}
+                                    </div>
+                                    {formData.departmentHeadId === agent.id && (
+                                      <CheckCircle2 className="w-5 h-5 text-violet-600 dark:text-violet-400 flex-shrink-0" />
+                                    )}
+                                  </button>
+                                ))}
+
+                              {agents.filter(agent =>
+                                !headSearchQuery ||
+                                agent.name.toLowerCase().includes(headSearchQuery.toLowerCase()) ||
+                                agent.email?.toLowerCase().includes(headSearchQuery.toLowerCase())
+                              ).length === 0 && (
+                                  <div className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                                    <User className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">No agents found</p>
+                                  </div>
+                                )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1216,7 +1135,7 @@ export default function DepartmentsPage() {
                   <Settings className="w-5 h-5 text-violet-600" />
                   Status
                 </h3>
-                
+
                 <label className="flex items-center gap-3 cursor-pointer group">
                   <div className="relative">
                     <input
@@ -1225,11 +1144,10 @@ export default function DepartmentsPage() {
                       onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                       className="sr-only"
                     />
-                    <div className={`w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${
-                      formData.isActive
-                        ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30' 
-                        : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
-                    }`}>
+                    <div className={`w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${formData.isActive
+                      ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30'
+                      : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
+                      }`}>
                       {formData.isActive && (
                         <svg className="w-3.5 h-3.5 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
                           <path d="M5 13l4 4L19 7"></path>
@@ -1251,7 +1169,7 @@ export default function DepartmentsPage() {
                   variant="outline"
                   onClick={() => {
                     setShowAddModal(false);
-                    setFormData({ name: '', description: '', isActive: true });
+                    setFormData({ name: '', description: '', departmentHeadId: '', isActive: true });
                   }}
                   disabled={submitting}
                   className="border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
@@ -1270,141 +1188,233 @@ export default function DepartmentsPage() {
           </div>
         </div>,
         document.body
-      )}
+      )
+      }
 
       {/* Edit Modal */}
-      {showEditModal && selectedDepartment && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowEditModal(false)}>
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-violet-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Edit Department</h3>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6">
-              <form onSubmit={handleEditDepartment} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
-                    <Building2 className="w-4 h-4" />
-                    Name <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Technical, Operations, Service"
-                    className="w-full h-11 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description of the department..."
-                    rows={3}
-                    className="w-full px-4 py-3 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
-                  />
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-                  <label htmlFor="isActiveEdit" className="flex items-center gap-3 cursor-pointer group">
+      {
+        showEditModal && selectedDepartment && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowEditModal(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-violet-200 dark:border-slate-700 shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-violet-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Edit Department</h3>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6">
+                <form onSubmit={handleEditDepartment} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                      <Building2 className="w-4 h-4" />
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g., Technical, Operations, Service"
+                      className="w-full h-11 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Brief description of the department..."
+                      rows={3}
+                      className="w-full px-4 py-3 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
+                    />
+                  </div>
+
+                  {/* Department Head */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Department Head
+                    </label>
                     <div className="relative">
-                      <input
-                        type="checkbox"
-                        id="isActiveEdit"
-                        checked={formData.isActive}
-                        onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                        className="sr-only"
-                      />
-                      <div className={`w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${
-                        formData.isActive
-                          ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30' 
+                      <button
+                        type="button"
+                        onClick={() => setShowHeadDropdown(!showHeadDropdown)}
+                        className="w-full h-11 px-4 rounded-xl border-2 border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent flex items-center justify-between hover:border-violet-300 dark:hover:border-slate-600 transition-colors"
+                      >
+                        <span className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                          <span className={formData.departmentHeadId ? 'text-slate-900 dark:text-white' : 'text-slate-400'}>
+                            {formData.departmentHeadId
+                              ? agents.find(a => a.id === formData.departmentHeadId)?.name || 'No head assigned'
+                              : 'Select department head'}
+                          </span>
+                        </span>
+                        <svg className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${showHeadDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {showHeadDropdown && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setShowHeadDropdown(false)} />
+                          <div className="absolute z-20 w-full mt-2 bg-white dark:bg-slate-800 border-2 border-violet-200 dark:border-slate-700 rounded-xl shadow-xl max-h-80 overflow-hidden">
+                            <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+                              <div className="relative">
+                                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                  type="text"
+                                  value={headSearchQuery}
+                                  onChange={(e) => setHeadSearchQuery(e.target.value)}
+                                  placeholder="Search agents..."
+                                  className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            </div>
+                            <div className="max-h-60 overflow-y-auto">
+                              <button
+                                type="button"
+                                onClick={() => { setFormData({ ...formData, departmentHeadId: '' }); setShowHeadDropdown(false); setHeadSearchQuery(''); }}
+                                className={`w-full px-4 py-3 text-left hover:bg-violet-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-3 ${!formData.departmentHeadId ? 'bg-violet-50 dark:bg-slate-700' : ''}`}
+                              >
+                                <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                                  <User className="w-4 h-4 text-slate-400" />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-sm font-medium text-slate-700 dark:text-slate-300">No head assigned</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">Department will have no head</div>
+                                </div>
+                                {!formData.departmentHeadId && <CheckCircle2 className="w-5 h-5 text-violet-600 dark:text-violet-400" />}
+                              </button>
+                              {agents.filter(agent => !headSearchQuery || agent.name.toLowerCase().includes(headSearchQuery.toLowerCase()) || agent.email?.toLowerCase().includes(headSearchQuery.toLowerCase())).map(agent => (
+                                <button
+                                  key={agent.id}
+                                  type="button"
+                                  onClick={() => { setFormData({ ...formData, departmentHeadId: agent.id }); setShowHeadDropdown(false); setHeadSearchQuery(''); }}
+                                  className={`w-full px-4 py-3 text-left hover:bg-violet-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-3 ${formData.departmentHeadId === agent.id ? 'bg-violet-50 dark:bg-slate-700' : ''}`}
+                                >
+                                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                                    {agent.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-slate-900 dark:text-white truncate">{agent.name}</div>
+                                    {agent.email && <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{agent.email}</div>}
+                                  </div>
+                                  {formData.departmentHeadId === agent.id && <CheckCircle2 className="w-5 h-5 text-violet-600 dark:text-violet-400 flex-shrink-0" />}
+                                </button>
+                              ))}
+                              {agents.filter(agent => !headSearchQuery || agent.name.toLowerCase().includes(headSearchQuery.toLowerCase()) || agent.email?.toLowerCase().includes(headSearchQuery.toLowerCase())).length === 0 && (
+                                <div className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                                  <User className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                  <p className="text-sm">No agents found</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    <label htmlFor="isActiveEdit" className="flex items-center gap-3 cursor-pointer group">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          id="isActiveEdit"
+                          checked={formData.isActive}
+                          onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                          className="sr-only"
+                        />
+                        <div className={`w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${formData.isActive
+                          ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30'
                           : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
-                      }`}>
-                        {formData.isActive && (
-                          <svg className="w-3.5 h-3.5 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
-                            <path d="M5 13l4 4L19 7"></path>
-                          </svg>
-                        )}
+                          }`}>
+                          {formData.isActive && (
+                            <svg className="w-3.5 h-3.5 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                              <path d="M5 13l4 4L19 7"></path>
+                            </svg>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300 block">Department is active</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Enable this department to receive tickets</span>
-                    </div>
-                  </label>
+                      <div>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 block">Department is active</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Enable this department to receive tickets</span>
+                      </div>
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowEditModal(false)}
+                      disabled={submitting}
+                      className="border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={submitting}
+                      className="bg-violet-600 hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500 text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {submitting ? 'Updating...' : 'Update Department'}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Delete Modal */}
+      {
+        showDeleteModal && selectedDepartment && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-red-200 dark:border-red-700 shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete Department</h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">This action cannot be undone</p>
+                  </div>
                 </div>
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <p className="text-slate-700 dark:text-slate-300 mb-6">
+                  Are you sure you want to delete <strong>{selectedDepartment.name}</strong>? This will only work if the department has no agents or tickets assigned.
+                </p>
+                <div className="flex items-center justify-end gap-3">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setShowEditModal(false)}
+                    onClick={() => setShowDeleteModal(false)}
                     disabled={submitting}
                     className="border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                   >
                     Cancel
                   </Button>
                   <Button
-                    type="submit"
+                    onClick={handleDeleteDepartment}
                     disabled={submitting}
-                    className="bg-violet-600 hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500 text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500 text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {submitting ? 'Updating...' : 'Update Department'}
+                    {submitting ? 'Deleting...' : 'Delete Department'}
                   </Button>
                 </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Modal */}
-      {showDeleteModal && selectedDepartment && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)}>
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-red-200 dark:border-red-700 shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete Department</h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">This action cannot be undone</p>
-                </div>
-              </div>
-              <p className="text-slate-700 dark:text-slate-300 mb-6">
-                Are you sure you want to delete <strong>{selectedDepartment.name}</strong>? This will only work if the department has no agents or tickets assigned.
-              </p>
-              <div className="flex items-center justify-end gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowDeleteModal(false)}
-                  disabled={submitting}
-                  className="border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleDeleteDepartment}
-                  disabled={submitting}
-                  className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500 text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? 'Deleting...' : 'Delete Department'}
-                </Button>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </AdminLayout>
+        )
+      }
+    </AdminLayout >
   );
 }
 

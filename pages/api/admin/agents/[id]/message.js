@@ -47,8 +47,21 @@ export default async function handler(req, res) {
 
       // If no conversation exists, create one
       if (!conversation) {
+        // Generate ticket number for admin-agent conversation
+        const prefix = 'TKT';
+        const now = new Date();
+        const year = now.getFullYear().toString().slice(-2);
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+        const day = now.getDate().toString().padStart(2, '0');
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const randomLetters = Array.from({ length: 3 }, () => 
+          letters[Math.floor(Math.random() * letters.length)]
+        ).join('');
+        const ticketNumber = `${prefix}-${year}${month}-${day}-${randomLetters}`;
+        
         conversation = await prisma.conversation.create({
           data: {
+            ticketNumber: ticketNumber,
             siteId,
             status: 'open',
             subject: `Admin - ${agent.name} Conversation`,
@@ -65,14 +78,14 @@ export default async function handler(req, res) {
           content: content.trim(),
           senderId: 'admin-001', // Admin sender ID
           senderType: 'admin',
-          conversationId: conversation.id,
+          conversationId: conversation.ticketNumber,
           type: 'text'
         }
       });
 
       // Update conversation's lastMessageAt
       await prisma.conversation.update({
-        where: { id: conversation.id },
+        where: { ticketNumber: conversation.ticketNumber },
         data: {
           lastMessageAt: new Date()
         }

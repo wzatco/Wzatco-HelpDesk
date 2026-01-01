@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   const { id } = req.query;
 
   if (req.method === 'GET') {
@@ -42,7 +41,7 @@ export default async function handler(req, res) {
         const ticketCounts = await prisma.conversation.groupBy({
           by: ['status'],
           where: { departmentId: id },
-          _count: { id: true }
+          _count: { ticketNumber: true }
         });
 
         const stats = {
@@ -54,11 +53,12 @@ export default async function handler(req, res) {
         };
 
         ticketCounts.forEach((count) => {
-          stats.total += count._count.id;
-          if (count.status === 'open') stats.open = count._count.id;
-          if (count.status === 'pending') stats.pending = count._count.id;
-          if (count.status === 'resolved') stats.resolved = count._count.id;
-          if (count.status === 'closed') stats.closed = count._count.id;
+          const countValue = count._count.ticketNumber || 0;
+          stats.total += countValue;
+          if (count.status === 'open') stats.open = countValue;
+          if (count.status === 'pending') stats.pending = countValue;
+          if (count.status === 'resolved') stats.resolved = countValue;
+          if (count.status === 'closed') stats.closed = countValue;
         });
 
         parsedDepartment.stats = stats;
@@ -73,7 +73,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     try {
-      const { name, description, isActive, slaConfig, workingHours, holidays } = req.body;
+      const { name, description, departmentHeadId, isActive, slaConfig, workingHours, holidays } = req.body;
 
       const updateData = {};
 
@@ -81,10 +81,10 @@ export default async function handler(req, res) {
         if (!name || name.trim() === '') {
           return res.status(400).json({ message: 'Department name cannot be empty' });
         }
-        
+
         // Check if another department with same name exists
         const existing = await prisma.department.findFirst({
-          where: { 
+          where: {
             name: name.trim(),
             id: { not: id }
           }
@@ -99,6 +99,10 @@ export default async function handler(req, res) {
 
       if (description !== undefined) {
         updateData.description = description?.trim() || null;
+      }
+
+      if (departmentHeadId !== undefined) {
+        updateData.departmentHeadId = departmentHeadId || null;
       }
 
       if (isActive !== undefined) {
@@ -148,8 +152,8 @@ export default async function handler(req, res) {
       });
 
       if (agentsCount > 0) {
-        return res.status(400).json({ 
-          message: `Cannot delete department. It has ${agentsCount} agent(s) assigned. Please reassign agents first.` 
+        return res.status(400).json({
+          message: `Cannot delete department. It has ${agentsCount} agent(s) assigned. Please reassign agents first.`
         });
       }
 
@@ -159,8 +163,8 @@ export default async function handler(req, res) {
       });
 
       if (ticketsCount > 0) {
-        return res.status(400).json({ 
-          message: `Cannot delete department. It has ${ticketsCount} ticket(s) routed to it.` 
+        return res.status(400).json({
+          message: `Cannot delete department. It has ${ticketsCount} ticket(s) routed to it.`
         });
       }
 

@@ -13,37 +13,9 @@ export const config = {
   },
 };
 
-async function ensureAdminsAsAgents(prisma) {
-  try {
-    const admins = await prisma.admin.findMany({
-      where: {
-        email: { not: null }
-      }
-    });
-    if (!admins || admins.length === 0) return;
-
-    for (const admin of admins) {
-      if (!admin.email) continue;
-      const existingAgent = await prisma.agent.findFirst({
-        where: { email: admin.email.toLowerCase() }
-      });
-      if (existingAgent) continue;
-
-      await prisma.agent.create({
-        data: {
-          name: admin.name || admin.email.split('@')[0],
-          email: admin.email.toLowerCase(),
-          slug: `admin-${admin.id}`,
-          userId: `ADMIN-${admin.id}`,
-          isActive: true,
-          presenceStatus: 'online'
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Failed to ensure admins are available as agents:', error);
-  }
-}
+// REMOVED: ensureAdminsAsAgents function
+// Admins should NOT be automatically created as Agents
+// Admin panel is exclusive to Super Admins only
 
 // Assignment Engine Functions (inline to avoid module resolution issues)
 async function getEnabledRules(prisma) {
@@ -53,10 +25,163 @@ async function getEnabledRules(prisma) {
   });
 }
 
+async function assignDirectAssignment(prisma, conversation, ruleConfig = {}) {
+  try {
+    // Direct assignment based on if/then rules
+    // Config structure: { conditions: [...], assignTo: 'agentId' or 'departmentId' }
+    const { conditions = [], assignTo, assignToType = 'agent' } = ruleConfig;
+
+    // Evaluate conditions
+    // First, evaluate all conditions and store results
+    const conditionResults = [];
+    for (const condition of conditions) {
+      const { field, operator, value } = condition;
+      if (!field || !operator || value === undefined || value === '') {
+        continue; // Skip incomplete conditions
+      }
+
+      let ticketValue = null;
+
+      // Get ticket field value
+      switch (field) {
+        case 'subject':
+          ticketValue = conversation.subject || '';
+          break;
+        case 'customerEmail':
+          ticketValue = conversation.customerEmail || '';
+          break;
+        case 'customerName':
+          ticketValue = conversation.customerName || '';
+          break;
+        case 'priority':
+          ticketValue = conversation.priority || 'low';
+          break;
+        case 'category':
+          ticketValue = conversation.category || '';
+          break;
+        case 'departmentId':
+          ticketValue = conversation.departmentId || '';
+          break;
+        case 'productModel':
+          ticketValue = conversation.productModel || '';
+          break;
+        default:
+          continue;
+      }
+
+      // Evaluate condition
+      let conditionResult = false;
+      switch (operator) {
+        case 'contains':
+          conditionResult = String(ticketValue).toLowerCase().includes(String(value).toLowerCase());
+          break;
+        case 'equals':
+          conditionResult = String(ticketValue).toLowerCase() === String(value).toLowerCase();
+          break;
+        case 'startsWith':
+          conditionResult = String(ticketValue).toLowerCase().startsWith(String(value).toLowerCase());
+          break;
+        case 'endsWith':
+          conditionResult = String(ticketValue).toLowerCase().endsWith(String(value).toLowerCase());
+          break;
+        case 'greaterThan':
+          conditionResult = Number(ticketValue) > Number(value);
+          break;
+        case 'lessThan':
+          conditionResult = Number(ticketValue) < Number(value);
+          break;
+        default:
+          conditionResult = false;
+      }
+
+      conditionResults.push({
+        result: conditionResult,
+        logic: condition.logic || 'AND' // Default to AND if not specified
+      });
+    }
+
+    // If no valid conditions, fail
+    if (conditionResults.length === 0) {
+      return null;
+    }
+
+    // Combine conditions using logic operators
+    // The logic field on each condition (except first) indicates how to combine with previous
+    let conditionsMet = conditionResults[0].result;
+    for (let i = 1; i < conditionResults.length; i++) {
+      const { result, logic } = conditionResults[i];
+      if (logic === 'OR') {
+        conditionsMet = conditionsMet || result; // OR: true if either is true
+      } else {
+        conditionsMet = conditionsMet && result; // AND: true only if both are true
+      }
+    }
+
+    if (!conditionsMet || !assignTo) {
+      return null;
+    }
+
+    // Assign to agent or department
+    if (assignToType === 'agent') {
+      const agent = await prisma.agent.findFirst({
+        where: { 
+          id: assignTo,
+          isActive: true,
+          presenceStatus: 'online' // Feature 7: Only assign to online agents
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          departmentId: true
+        }
+      });
+      return agent;
+    } else if (assignToType === 'department') {
+      // Find an agent in the department with least load
+      const agents = await prisma.agent.findMany({
+        where: {
+          departmentId: assignTo,
+          isActive: true,
+          presenceStatus: 'online' // Feature 7: Only assign to online agents
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          departmentId: true,
+          assignedConversations: {
+            where: { status: { in: ['open', 'pending'] } },
+            select: { id: true }
+          }
+        }
+      });
+      if (agents.length === 0) return null;
+      const sorted = agents.sort((a, b) => (a.assignedConversations?.length || 0) - (b.assignedConversations?.length || 0));
+      return sorted[0];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error in direct assignment:', error);
+    return null;
+  }
+}
+
 async function assignRoundRobin(prisma, conversation, ruleConfig = {}) {
   try {
     const agents = await prisma.agent.findMany({
-      where: { isActive: true },
+      where: { 
+        isActive: true,
+        presenceStatus: 'online' // Feature 7: Only assign to online agents
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        departmentId: true,
+        createdAt: true
+      },
       orderBy: { createdAt: 'asc' }
     });
     if (agents.length === 0) return null;
@@ -81,17 +206,26 @@ async function assignRoundRobin(prisma, conversation, ruleConfig = {}) {
 async function assignLoadBased(prisma, conversation, ruleConfig = {}) {
   try {
     const agents = await prisma.agent.findMany({
-      where: { isActive: true },
-      include: {
+      where: { 
+        isActive: true,
+        presenceStatus: 'online' // Feature 7: Only assign to online agents
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        departmentId: true,
+        maxLoad: true,
         assignedConversations: {
-          where: { status: { in: ['open', 'pending'] } }
+          where: { status: { in: ['open', 'pending'] } },
+          select: { id: true }
         }
       }
     });
     if (agents.length === 0) return null;
     const agentsWithLoad = agents.map(agent => ({
       ...agent,
-      currentLoad: agent.assignedConversations.length,
+      currentLoad: agent.assignedConversations?.length || 0,
       maxLoad: agent.maxLoad || 999
     }));
     const availableAgents = agentsWithLoad.filter(a => a.currentLoad < a.maxLoad);
@@ -111,27 +245,41 @@ async function assignDepartmentMatch(prisma, conversation, ruleConfig = {}) {
   try {
     const conversationDepartment = conversation.category || 'WZATCO';
     const agents = await prisma.agent.findMany({
-      where: { isActive: true, department: conversationDepartment },
-      include: {
+      where: { 
+        isActive: true, 
+        department: conversationDepartment,
+        presenceStatus: 'online' // Feature 7: Only assign to online agents
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        departmentId: true,
         assignedConversations: {
-          where: { status: { in: ['open', 'pending'] } }
+          where: { status: { in: ['open', 'pending'] } },
+          select: { id: true }
         }
       }
     });
     if (agents.length === 0) {
       const fallbackAgents = await prisma.agent.findMany({
         where: { isActive: true },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          departmentId: true,
           assignedConversations: {
-            where: { status: { in: ['open', 'pending'] } }
+            where: { status: { in: ['open', 'pending'] } },
+            select: { id: true }
           }
         }
       });
       if (fallbackAgents.length === 0) return null;
-      const sorted = fallbackAgents.sort((a, b) => a.assignedConversations.length - b.assignedConversations.length);
+      const sorted = fallbackAgents.sort((a, b) => (a.assignedConversations?.length || 0) - (b.assignedConversations?.length || 0));
       return sorted[0];
     }
-    const sorted = agents.sort((a, b) => a.assignedConversations.length - b.assignedConversations.length);
+    const sorted = agents.sort((a, b) => (a.assignedConversations?.length || 0) - (b.assignedConversations?.length || 0));
     return sorted[0];
   } catch (error) {
     console.error('Error in department match assignment:', error);
@@ -141,30 +289,59 @@ async function assignDepartmentMatch(prisma, conversation, ruleConfig = {}) {
 
 async function assignSkillMatch(prisma, conversation, ruleConfig = {}) {
   try {
-    const conversationCategory = conversation.category || 'WZATCO';
+    const { requiredSkills = [] } = ruleConfig;
+    
+    // If no required skills specified, fall back to category-based matching
+    let skillsToMatch = requiredSkills;
+    if (skillsToMatch.length === 0) {
+      const conversationCategory = conversation.category || 'WZATCO';
+      skillsToMatch = [conversationCategory];
+    }
+    
     const agents = await prisma.agent.findMany({
       where: { isActive: true },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        departmentId: true,
+        skills: true,
         assignedConversations: {
-          where: { status: { in: ['open', 'pending'] } }
+          where: { status: { in: ['open', 'pending'] } },
+          select: { id: true }
         }
       }
     });
+    
     if (agents.length === 0) return null;
+    
+    // Find agents with matching skills
     const matchingAgents = agents.filter(agent => {
       if (!agent.skills) return false;
       try {
-        const skills = JSON.parse(agent.skills);
-        return Array.isArray(skills) && skills.includes(conversationCategory);
+        const agentSkills = JSON.parse(agent.skills);
+        if (!Array.isArray(agentSkills)) return false;
+        
+        // Check if agent has at least one of the required skills
+        return skillsToMatch.some(skill => 
+          agentSkills.some(agentSkill => 
+            agentSkill.toLowerCase().includes(skill.toLowerCase()) ||
+            skill.toLowerCase().includes(agentSkill.toLowerCase())
+          )
+        );
       } catch {
         return false;
       }
     });
+    
+    // If no matching agents, fall back to least loaded agent
     if (matchingAgents.length === 0) {
-      const sorted = agents.sort((a, b) => a.assignedConversations.length - b.assignedConversations.length);
+      const sorted = agents.sort((a, b) => (a.assignedConversations?.length || 0) - (b.assignedConversations?.length || 0));
       return sorted[0];
     }
-    const sorted = matchingAgents.sort((a, b) => a.assignedConversations.length - b.assignedConversations.length);
+    
+    // Return least loaded agent from matching agents
+    const sorted = matchingAgents.sort((a, b) => (a.assignedConversations?.length || 0) - (b.assignedConversations?.length || 0));
     return sorted[0];
   } catch (error) {
     console.error('Error in skill match assignment:', error);
@@ -174,9 +351,8 @@ async function assignSkillMatch(prisma, conversation, ruleConfig = {}) {
 
 async function assignTicket(prisma, conversationId) {
   try {
-    await ensureAdminsAsAgents(prisma);
     const conversation = await prisma.conversation.findUnique({
-      where: { id: conversationId }
+      where: { ticketNumber: conversationId }
     });
     if (!conversation) {
       throw new Error('Conversation not found');
@@ -188,6 +364,13 @@ async function assignTicket(prisma, conversationId) {
     if (rules.length === 0) {
       return { assigned: false, reason: 'No assignment rules configured' };
     }
+    
+    // Check if manual assignment is the highest priority rule
+    // Rules are sorted by priority (ascending), so first rule has highest priority
+    if (rules.length > 0 && rules[0].ruleType === 'manual' && rules[0].enabled) {
+      return { assigned: false, reason: 'Manual assignment enabled - ticket goes to unassigned queue' };
+    }
+    
     for (const rule of rules) {
       let assignedAgent = null;
       let config = {};
@@ -197,25 +380,38 @@ async function assignTicket(prisma, conversationId) {
         }
       } catch {}
       switch (rule.ruleType) {
+        case 'direct_assignment':
+          assignedAgent = await assignDirectAssignment(prisma, conversation, config);
+          break;
         case 'round_robin':
           assignedAgent = await assignRoundRobin(prisma, conversation, config);
           break;
         case 'load_based':
           assignedAgent = await assignLoadBased(prisma, conversation, config);
           break;
-        case 'department_match':
-          assignedAgent = await assignDepartmentMatch(prisma, conversation, config);
-          break;
         case 'skill_match':
           assignedAgent = await assignSkillMatch(prisma, conversation, config);
           break;
+        case 'manual':
+          // Manual assignment - skip auto-assignment, tickets go to unassigned queue
+          continue;
         default:
           continue;
       }
       if (assignedAgent) {
+        // Auto-update departmentId to match assigned agent's department
+        const updateData = {
+          assigneeId: assignedAgent.id
+        };
+        
+        // Only update departmentId if agent has one
+        if (assignedAgent.departmentId) {
+          updateData.departmentId = assignedAgent.departmentId;
+        }
+        
         await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { assigneeId: assignedAgent.id }
+          where: { ticketNumber: conversationId },
+          data: updateData
         });
         const agentLoad = await prisma.conversation.count({
           where: {
@@ -350,15 +546,15 @@ async function getNextTicketSequence(prisma, date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const yymm = `${year}${month}`;
   
-  // Find all tickets (conversations) with matching pattern (new format: TKT-YYMM-SEQ)
+  // Find all tickets (conversations) with matching pattern (format: TKT-YYMM-DD-XXX)
   const tickets = await prisma.conversation.findMany({
     where: {
-      id: {
+      ticketNumber: {
         startsWith: `TKT-${yymm}-`
       }
     },
     orderBy: {
-      id: 'desc'
+      ticketNumber: 'desc'
     }
   });
   
@@ -366,35 +562,41 @@ async function getNextTicketSequence(prisma, date = new Date()) {
     return 1;
   }
   
-  // Extract sequence from last ticket ID
-  // Handle old formats (TKT-YYMM-CAT-PRI-SEQ, TKT-YYMM-CAT-SEQ) and new format (TKT-YYMM-SEQ)
+  // Extract sequence from last ticketNumber
+  // Handle format: TKT-YYMM-DD-XXX (where XXX is 3 random uppercase letters)
+  // For sequence, we'll use a timestamp-based approach or count existing tickets
   let maxSeq = 0;
   tickets.forEach(ticket => {
-    const parts = ticket.id.split('-');
-    const lastPart = parts[parts.length - 1];
-    const seq = parseInt(lastPart || '0', 10);
-    if (seq > maxSeq) {
-      maxSeq = seq;
+    if (ticket.ticketNumber && ticket.ticketNumber.startsWith('TKT-')) {
+      // Extract date part and count tickets on same date
+      const parts = ticket.ticketNumber.split('-');
+      if (parts.length >= 3) {
+        // Count is based on tickets created on the same date
+        maxSeq++;
+      }
     }
   });
   
   return maxSeq + 1;
 }
 
-async function generateTicketId({ category, priority, createdAt = new Date(), sequence = null, prisma = null }) {
-  if (sequence === null && prisma) {
-    sequence = await getNextTicketSequence(prisma, createdAt);
-  } else if (sequence === null) {
-    sequence = 1;
-  }
+// Generate ticket number in format: TKT-YYMM-DD-{3 random uppercase letters}
+// Example: TKT-2512-12-SRB
+// This matches the widget ticket creation format
+function generateTicketNumber() {
+  const prefix = 'TKT';
+  const now = new Date();
+  const year = now.getFullYear().toString().slice(-2); // Last 2 digits of year (YY)
+  const month = (now.getMonth() + 1).toString().padStart(2, '0'); // MM
+  const day = now.getDate().toString().padStart(2, '0'); // DD
   
-  const year = createdAt.getFullYear().toString().slice(-2);
-  const month = String(createdAt.getMonth() + 1).padStart(2, '0');
-  const yymm = `${year}${month}`;
-  const seq = String(sequence).padStart(3, '0');
+  // Generate 3 random uppercase letters
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const randomLetters = Array.from({ length: 3 }, () => 
+    letters[Math.floor(Math.random() * letters.length)]
+  ).join('');
   
-  // New format: TKT-YYMM-SEQ (clean and simple, no category, priority, or department)
-  return `TKT-${yymm}-${seq}`;
+  return `${prefix}-${year}${month}-${day}-${randomLetters}`;
 }
 
 const prisma = new PrismaClient();
@@ -438,7 +640,9 @@ async function handleGet(req, res) {
       searchType, // 'all', 'mobile', 'email', 'name', 'ticketId', 'product'
       productModel,
       tags,
-      agentId
+      agentId,
+      needReply,
+      showAll = 'false' // NEW: Parameter to show/hide resolved/closed tickets
     } = req.query;
     
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -449,6 +653,12 @@ async function handleGet(req, res) {
     // Status filter
     if (status && status !== 'all') {
       where.status = status;
+    } else {
+      // NEW: Hide resolved/closed tickets by default unless showAll=true
+      const hideResolvedClosed = showAll !== 'true';
+      if (hideResolvedClosed) {
+        where.status = { notIn: ['resolved', 'closed'] };
+      }
     }
     
     // Priority filter
@@ -467,10 +677,18 @@ async function handleGet(req, res) {
       if (assignee === 'unassigned') {
         where.assigneeId = null;
       } else {
-        // Find agent by name
-        const agent = await prisma.agent.findFirst({
-          where: { name: { contains: assignee } }
-        });
+        // First try to find by ID (in case assignee is an agent ID)
+        let agent = await prisma.agent.findUnique({
+          where: { id: assignee }
+        }).catch(() => null);
+        
+        // If not found by ID, try to find by name
+        if (!agent) {
+          agent = await prisma.agent.findFirst({
+            where: { name: { contains: assignee } }
+          });
+        }
+        
         if (agent) {
           where.assigneeId = agent.id;
         }
@@ -575,8 +793,8 @@ async function handleGet(req, res) {
         }
         where.OR = orConditions;
       } else if (searchMode === 'ticketId') {
-        // Search by ticket ID
-        where.id = { contains: searchTerm };
+        // Search by ticketNumber
+        where.ticketNumber = { contains: searchTerm };
       } else if (searchMode === 'product') {
         // Search by product model
         where.productModel = { contains: searchTerm };
@@ -617,17 +835,26 @@ async function handleGet(req, res) {
     }
 
     // Fetch tickets with related data
+    // If needReply filter is active, we need all messages to check the last one
+    const includeMessages = needReply === 'true' ? {
+      messages: {
+        orderBy: { createdAt: 'desc' }
+      }
+    } : {
+      messages: {
+        take: 1,
+        orderBy: { createdAt: 'desc' }
+      }
+    };
+
     const [tickets, totalCount] = await Promise.all([
       prisma.conversation.findMany({
         where,
-        skip,
-        take: parseInt(limit),
+        skip: needReply === 'true' ? 0 : skip, // Skip pagination if filtering, we'll paginate after
+        take: needReply === 'true' ? 10000 : parseInt(limit), // Fetch all if filtering, then filter and paginate
         orderBy: { updatedAt: 'desc' },
         include: {
-          messages: {
-            take: 1,
-            orderBy: { createdAt: 'desc' }
-          },
+          ...includeMessages,
           assignee: true,
           customer: {
             select: {
@@ -654,9 +881,47 @@ async function handleGet(req, res) {
       prisma.conversation.count({ where })
     ]);
 
+    // Apply Need Reply filter if requested
+    let filteredTickets = tickets;
+    if (needReply === 'true') {
+      filteredTickets = tickets.filter(ticket => {
+        // Get all messages for this ticket
+        const messages = ticket.messages || [];
+        
+        // If no messages, it's a new ticket that needs reply
+        if (messages.length === 0) {
+          return true;
+        }
+        
+        // Get the last message (already sorted by createdAt desc)
+        const lastMessage = messages[0];
+        
+        // Ticket needs reply if last message is from customer
+        // Exclude if last message is from agent or admin
+        return lastMessage.senderType === 'customer';
+      });
+      
+      // Apply pagination after filtering
+      const startIndex = skip;
+      const endIndex = skip + parseInt(limit);
+      filteredTickets = filteredTickets.slice(startIndex, endIndex);
+    }
+
+    // Recalculate total count if needReply filter is applied
+    let finalTotalCount = totalCount;
+    if (needReply === 'true') {
+      // Count all tickets that need reply (from the filtered list)
+      finalTotalCount = tickets.filter(ticket => {
+        const messages = ticket.messages || [];
+        if (messages.length === 0) return true;
+        const lastMessage = messages[0];
+        return lastMessage.senderType === 'customer';
+      }).length;
+    }
+
     // Transform tickets for frontend
-    const transformedTickets = await Promise.all(tickets.map(async (ticket) => {
-      const lastMessage = ticket.messages[0];
+    const transformedTickets = await Promise.all(filteredTickets.map(async (ticket) => {
+      const lastMessage = ticket.messages && ticket.messages.length > 0 ? ticket.messages[0] : null;
       const timeAgo = Math.floor((Date.now() - new Date(ticket.updatedAt).getTime()) / (1000 * 60));
       const timeString = timeAgo < 60 ? `${timeAgo}m ago` : 
                         timeAgo < 1440 ? `${Math.floor(timeAgo / 60)}h ago` : 
@@ -692,7 +957,7 @@ async function handleGet(req, res) {
       }
 
       return {
-        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
         subject: ticket.subject || 'No subject',
         status: ticket.status,
         priority: ticket.priority || 'low',
@@ -726,11 +991,11 @@ async function handleGet(req, res) {
       };
     }));
 
-    const totalPages = Math.ceil(totalCount / parseInt(limit));
+    const totalPages = Math.ceil(finalTotalCount / parseInt(limit));
 
     res.status(200).json({
       tickets: transformedTickets,
-      totalTickets: totalCount,
+      totalTickets: finalTotalCount,
       totalPages: totalPages,
       currentPage: parseInt(page)
     });
@@ -871,6 +1136,10 @@ async function handlePost(req, res) {
         }
 
         // Update existing customer
+        const oldCustomer = await prisma.customer.findUnique({
+          where: { email }
+        });
+        
         customer = await prisma.customer.update({
           where: { email },
           data: {
@@ -879,6 +1148,29 @@ async function handlePost(req, res) {
             location: address || undefined
           }
         });
+
+        // Trigger webhook for customer update
+        try {
+          const { triggerWebhook } = await import('../../../../lib/utils/webhooks');
+          await triggerWebhook('customer.updated', {
+            customer: {
+              id: customer.id,
+              name: customer.name,
+              email: customer.email,
+              phone: customer.phone,
+              location: customer.location,
+              updatedAt: customer.updatedAt
+            },
+            changes: {
+              name: oldCustomer?.name !== customer.name,
+              phone: oldCustomer?.phone !== customer.phone,
+              location: oldCustomer?.location !== customer.location
+            }
+          });
+        } catch (webhookError) {
+          console.error('Error triggering customer.updated webhook:', webhookError);
+          // Don't fail ticket creation if webhook fails
+        }
       } else {
         // Create new customer with formatted ID
         try {
@@ -899,6 +1191,24 @@ async function handlePost(req, res) {
               location: address || undefined
             }
           });
+
+          // Trigger webhook for customer creation
+          try {
+            const { triggerWebhook } = await import('../../../../lib/utils/webhooks');
+            await triggerWebhook('customer.created', {
+              customer: {
+                id: customer.id,
+                name: customer.name,
+                email: customer.email,
+                phone: customer.phone,
+                location: customer.location,
+                createdAt: customer.createdAt
+              }
+            });
+          } catch (webhookError) {
+            console.error('Error triggering customer.created webhook:', webhookError);
+            // Don't fail ticket creation if webhook fails
+          }
         } catch (customerError) {
           console.error('Error generating customer ID or creating customer:', customerError);
           // Fallback: create customer with auto-generated ID if ID generation fails
@@ -910,24 +1220,37 @@ async function handlePost(req, res) {
               location: address || undefined
             }
           });
+
+          // Trigger webhook for customer creation (fallback)
+          try {
+            const { triggerWebhook } = await import('../../../../lib/utils/webhooks');
+            await triggerWebhook('customer.created', {
+              customer: {
+                id: customer.id,
+                name: customer.name,
+                email: customer.email,
+                phone: customer.phone,
+                location: customer.location,
+                createdAt: customer.createdAt
+              }
+            });
+          } catch (webhookError) {
+            console.error('Error triggering customer.created webhook:', webhookError);
+            // Don't fail ticket creation if webhook fails
+          }
         }
       }
     }
 
-    // Create conversation (ticket) with formatted ID
+    // Create conversation (ticket) with ticketNumber
     let conversation;
     try {
-      const now = new Date();
-      const ticketId = await generateTicketId({
-        category: category || 'WZATCO',
-        priority: priority || 'low',
-        createdAt: now,
-        prisma
-      });
+      // Generate ticket number using same format as widget
+      const ticketNumber = generateTicketNumber();
 
       conversation = await prisma.conversation.create({
         data: {
-          id: ticketId,
+          ticketNumber: ticketNumber,
           siteId: 'default',
           status: 'open',
           subject,
@@ -940,28 +1263,14 @@ async function handlePost(req, res) {
           accessoryId: accessoryId || undefined
         }
       });
-    } catch (ticketIdError) {
-      console.error('Error generating ticket ID or creating ticket:', ticketIdError);
-      // Fallback: create ticket with auto-generated ID if ID generation fails
-      conversation = await prisma.conversation.create({
-        data: {
-          siteId: 'default',
-          status: 'open',
-          subject,
-          customerId: customer.id,
-          customerName: customer.name,
-          category: category || 'WZATCO',
-          priority,
-          productModel: productModel || undefined, // Keep for backward compatibility
-          productId: productId || undefined,
-          accessoryId: accessoryId || undefined
-        }
-      });
+    } catch (ticketError) {
+      console.error('Error creating ticket:', ticketError);
+      throw ticketError; // Re-throw to be caught by outer try-catch
     }
 
     // Create initial message
     const messageData = {
-      conversationId: conversation.id,
+      conversationId: conversation.ticketNumber,
       senderType: 'admin',
       senderId: 'admin',
       content: message,
@@ -973,11 +1282,40 @@ async function handlePost(req, res) {
       data: messageData
     });
 
+    // Trigger webhook for message creation
+    try {
+      const { triggerWebhook } = await import('../../../../lib/utils/webhooks');
+      await triggerWebhook('message.created', {
+        message: {
+          id: createdMessage.id,
+          content: createdMessage.content,
+          senderId: createdMessage.senderId,
+          senderType: createdMessage.senderType,
+          type: createdMessage.type,
+          createdAt: createdMessage.createdAt
+        },
+        ticket: {
+          ticketNumber: conversation.ticketNumber,
+          subject: conversation.subject,
+          status: conversation.status,
+          priority: conversation.priority
+        },
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email
+        }
+      });
+    } catch (webhookError) {
+      console.error('Error triggering message.created webhook:', webhookError);
+      // Don't fail ticket creation if webhook fails
+    }
+
     // Handle attachments if provided (base64 encoded files)
     if (attachments && Array.isArray(attachments) && attachments.length > 0) {
       const fs = require('fs');
       const path = require('path');
-      const uploadsDir = path.join(process.cwd(), 'uploads', 'tickets', conversation.id);
+        const uploadsDir = path.join(process.cwd(), 'uploads', 'tickets', conversation.ticketNumber);
       
       if (!fs.existsSync(uploadsDir)) {
         fs.mkdirSync(uploadsDir, { recursive: true });
@@ -1010,7 +1348,7 @@ async function handlePost(req, res) {
             const filePath = path.join(uploadsDir, filename);
             
             fs.writeFileSync(filePath, buffer);
-            const fileUrl = `/api/uploads/tickets/${conversation.id}/${filename}`;
+              const fileUrl = `/api/uploads/tickets/${conversation.ticketNumber}/${filename}`;
 
             await prisma.attachment.create({
               data: {
@@ -1031,22 +1369,65 @@ async function handlePost(req, res) {
 
     // Update conversation's lastMessageAt
     await prisma.conversation.update({
-      where: { id: conversation.id },
+      where: { ticketNumber: conversation.ticketNumber },
       data: { lastMessageAt: new Date() }
     });
 
     // Try to auto-assign ticket using assignment rules
     let assignmentResult = null;
     try {
-      assignmentResult = await assignTicket(prisma, conversation.id);
+      assignmentResult = await assignTicket(prisma, conversation.ticketNumber);
+      
+      // Emit socket event if ticket was assigned
+      if (assignmentResult && assignmentResult.assigned) {
+        try {
+          const { initialize } = await import('../../../../lib/chat-service');
+          const chatService = initialize();
+          
+          console.log('🎯 Auto-assignment successful, emitting ticket:assigned event');
+          chatService.emitTicketAssignment({
+            ticketId: conversation.ticketNumber,
+            assigneeId: assignmentResult.agentId,
+            assigneeName: assignmentResult.agentName,
+            assignedBy: `${assignmentResult.ruleName} (${assignmentResult.ruleType})`,
+            ticket: updatedConversation || conversation
+          });
+        } catch (socketError) {
+          console.error('❌ Error emitting ticket:assigned socket event for auto-assignment:', socketError);
+          // Don't fail ticket creation if socket emission fails
+        }
+      }
     } catch (assignmentError) {
       // Log error but don't fail ticket creation if assignment fails
       console.error('Error auto-assigning ticket:', assignmentError);
     }
 
+    // Start SLA timers for the new ticket
+    try {
+      const { SLAService } = await import('../../../../lib/sla-service');
+      await SLAService.startTimers(
+        conversation.ticketNumber,
+        priority || 'low',
+        conversation.departmentId || null,
+        category || 'WZATCO'
+      );
+    } catch (slaError) {
+      // Log error but don't fail ticket creation if SLA timer start fails
+      console.error('Error starting SLA timers:', slaError);
+    }
+
+    // Run automation for ticket creation
+    try {
+      const { runAutomation } = await import('../../../../lib/automation/engine');
+      await runAutomation(conversation, 'TICKET_CREATED');
+    } catch (automationError) {
+      // Log error but don't fail ticket creation if automation fails
+      console.error('Error running automation:', automationError);
+    }
+
     // Fetch updated conversation with assignee if assigned
     const updatedConversation = await prisma.conversation.findUnique({
-      where: { id: conversation.id },
+      where: { ticketNumber: conversation.ticketNumber },
       include: {
         assignee: {
           select: {
@@ -1062,12 +1443,12 @@ async function handlePost(req, res) {
     try {
       const { notifyTicketCreatedCustomer, notifyTicketCreated } = await import('@/lib/utils/notifications');
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-      const ticketLink = `${baseUrl}/ticket/${conversation.id}`;
+      const ticketLink = `${baseUrl}/admin/tickets/${conversation.ticketNumber}`;
 
       // Send email to customer
       if (customer.email) {
         notifyTicketCreatedCustomer(prisma, {
-          ticketId: conversation.id,
+          ticketId: conversation.ticketNumber,
           ticketSubject: conversation.subject,
           customerEmail: customer.email,
           customerName: customer.name,
@@ -1081,11 +1462,11 @@ async function handlePost(req, res) {
 
       // Send email to admins
       notifyTicketCreated(prisma, {
-        ticketId: conversation.id,
+        ticketId: conversation.ticketNumber,
         ticketSubject: conversation.subject,
         customerName: customer.name,
         priority: conversation.priority || 'low',
-        ticketLink: `${baseUrl}/admin/tickets/${conversation.id}`,
+        ticketLink: `${baseUrl}/admin/tickets/${conversation.ticketNumber}`,
         sendEmail: true
       }).catch(error => {
         console.error('Error sending ticket created email to admins:', error);
@@ -1099,7 +1480,7 @@ async function handlePost(req, res) {
     try {
       await triggerWebhook('ticket.created', {
         ticket: {
-          id: updatedConversation.id,
+          ticketNumber: updatedConversation.ticketNumber,
           subject: updatedConversation.subject,
           status: updatedConversation.status,
           priority: updatedConversation.priority,
@@ -1125,7 +1506,7 @@ async function handlePost(req, res) {
     res.status(201).json({
       message: 'Ticket created successfully',
       ticket: {
-        id: updatedConversation.id,
+        ticketNumber: updatedConversation.ticketNumber,
         subject: updatedConversation.subject,
         status: updatedConversation.status,
         priority: updatedConversation.priority,

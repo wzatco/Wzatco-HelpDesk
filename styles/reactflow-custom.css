@@ -327,21 +327,29 @@ select {
 }
 
 select option {
-  padding: 8px 12px;
+  padding: 10px 16px;
   font-weight: 400;
   line-height: 1.5;
+  cursor: pointer;
 }
 
 /* Light mode option styling */
 select option {
   background-color: #ffffff;
   color: #0f172a;
+  padding: 10px 16px;
 }
 
-select option:hover,
-select option:checked {
-  background: linear-gradient(0deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.15) 100%);
-  color: #1e40af;
+select option:hover {
+  background: linear-gradient(0deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.15) 100%);
+  color: #7c3aed;
+}
+
+select option:checked,
+select option:focus {
+  background: linear-gradient(0deg, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0.25) 100%);
+  color: #6d28d9;
+  font-weight: 500;
 }
 
 /* Dark mode option styling */
@@ -349,12 +357,19 @@ select option:checked {
   select option {
     background-color: #1e293b;
     color: #f1f5f9;
+    padding: 10px 16px;
   }
   
-  select option:hover,
-  select option:checked {
-    background: linear-gradient(0deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.2) 100%);
+  select option:hover {
+    background: linear-gradient(0deg, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0.3) 100%);
     color: #c4b5fd;
+  }
+
+  select option:checked,
+  select option:focus {
+    background: linear-gradient(0deg, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0.4) 100%);
+    color: #ddd6fe;
+    font-weight: 500;
   }
 }
 
@@ -362,12 +377,19 @@ select option:checked {
 .dark select option {
   background-color: #1e293b;
   color: #f1f5f9;
+  padding: 10px 16px;
 }
 
-.dark select option:hover,
-.dark select option:checked {
-  background: linear-gradient(0deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.2) 100%);
+.dark select option:hover {
+  background: linear-gradient(0deg, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0.3) 100%);
   color: #c4b5fd;
+}
+
+.dark select option:checked,
+.dark select option:focus {
+  background: linear-gradient(0deg, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0.4) 100%);
+  color: #ddd6fe;
+  font-weight: 500;
 }
 
 /* Select dropdown container styling */
@@ -375,13 +397,118 @@ select::-ms-expand {
   display: none;
 }
 
-select:focus option:checked {
-  background: #3b82f6;
-  color: white;
+/* Enhanced select focus states */
+select:focus {
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
-.dark select:focus option:checked {
-  background: #8b5cf6;
-  color: white;
+.dark select:focus {
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+/* Custom scrollbar for select dropdowns */
+select {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.5) transparent;
+}
+
+select::-webkit-scrollbar {
+  width: 8px;
+}
+
+select::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+select::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.5);
+  border-radius: 4px;
+}
+
+select::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.7);
+}
+
+/* Custom Styled Select Dropdown */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.5) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.5);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.7);
+}
+
+/* Styled Select Dropdown Animations */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.styled-select-dropdown {
+  animation: slideDown 0.2s ease-out;
+}
+
+/* Recharts Dark Mode Support */
+.dark .recharts-legend-wrapper {
+  color: rgb(203 213 225) !important;
+}
+
+.dark .recharts-legend-item-text {
+  color: rgb(203 213 225) !important;
+  fill: rgb(203 213 225) !important;
+}
+
+.dark .recharts-cartesian-axis-tick-value {
+  fill: rgb(203 213 225) !important;
+}
+
+.dark .recharts-label {
+  fill: rgb(203 213 225) !important;
+}
+
+/* Recharts SVG text elements - dark mode */
+.dark .recharts-wrapper text {
+  fill: rgb(203 213 225) !important;
+}
+
+.dark .recharts-legend-wrapper text {
+  fill: rgb(203 213 225) !important;
+}
+
+.dark .recharts-cartesian-axis text {
+  fill: rgb(203 213 225) !important;
+}
+
+/* Light mode - ensure text is visible */
+.recharts-wrapper text {
+  fill: rgb(51 65 85);
+}
+
+.recharts-legend-wrapper text {
+  fill: rgb(51 65 85);
+}
+
+.recharts-cartesian-axis text {
+  fill: rgb(51 65 85);
 }
 

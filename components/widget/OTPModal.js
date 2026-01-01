@@ -59,6 +59,10 @@ export default function OTPModal({ email, onVerify, onClose }) {
       });
       const data = await response.json();
       if (data.success) {
+        // Save token to localStorage if provided
+        if (data.token) {
+          localStorage.setItem('widget_token', data.token);
+        }
         onVerify();
       } else {
         setError(data.message || 'Invalid OTP');

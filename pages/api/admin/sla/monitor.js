@@ -1,9 +1,14 @@
-import SLAService from '../../../../lib/sla-service';
+import { SLAService } from '../../../../lib/sla-service';
 
 /**
  * SLA Monitor Endpoint
- * This endpoint should be called periodically (e.g., every minute via cron job)
- * to monitor active SLA timers and send notifications
+ * This endpoint should be called periodically (e.g., every 5 minutes via cron job)
+ * to monitor active SLA timers, handle business hours pause/resume, and send notifications.
+ * 
+ * IMPORTANT: For business hours enforcement, this should run frequently enough to catch:
+ * - Morning business hours start (to resume paused timers)
+ * - Evening business hours end (to pause running timers)
+ * Recommended: Every 5 minutes (cron: */5 * * * *)
  */
 export default async function handler(req, res) {
   try {

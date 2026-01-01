@@ -1,7 +1,7 @@
 // Admin Page for Product Tutorials & Guides
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import AdminLayout from '../../../components/admin/universal/AdminLayout';
@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { withAuth } from '../../../lib/withAuth';
-import { GraduationCap, Package, Save, ExternalLink, Video, FileText, Youtube, Loader2, Plus, Edit2, Link2 } from 'lucide-react';
+import { GraduationCap, Package, Save, ExternalLink, Video, FileText, Youtube, Loader2, Plus, Edit2, Link2, ChevronDown, Check } from 'lucide-react';
 
 export default function TutorialsPage() {
   const router = useRouter();
@@ -21,6 +21,8 @@ export default function TutorialsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [notification, setNotification] = useState({ type: null, message: '' });
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const productDropdownRef = useRef(null);
   const [formData, setFormData] = useState({
     productId: '',
     manualLink: '',
@@ -32,6 +34,20 @@ export default function TutorialsPage() {
     fetchProducts();
     fetchTutorials();
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
+        setIsProductDropdownOpen(false);
+      }
+    };
+
+    if (isProductDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isProductDropdownOpen]);
 
   const fetchProducts = async () => {
     try {
@@ -67,6 +83,7 @@ export default function TutorialsPage() {
 
   const handleProductSelect = (productId) => {
     setSelectedProduct(productId);
+    setIsProductDropdownOpen(false);
     const existingTutorial = tutorials.find(t => t.productId === productId);
     
     if (existingTutorial) {
@@ -174,20 +191,60 @@ export default function TutorialsPage() {
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                           Product
                         </label>
-                        <select
-                          value={selectedProduct || ''}
-                          onChange={(e) => handleProductSelect(e.target.value)}
-                          className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all shadow-sm hover:shadow-md"
-                        >
-                          <option value="">Select a product...</option>
-                          {products
-                            .filter(p => p.isActive)
-                            .map((product) => (
-                              <option key={product.id} value={product.id}>
-                                {product.name}
-                              </option>
-                            ))}
-                        </select>
+                        <div className="relative" ref={productDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setIsProductDropdownOpen(!isProductDropdownOpen)}
+                            className="w-full px-4 py-3 border-2 border-violet-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 dark:focus:border-violet-500 transition-all shadow-sm hover:shadow-md flex items-center justify-between hover:border-violet-300 dark:hover:border-slate-600"
+                          >
+                            <span className={selectedProduct ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}>
+                              {selectedProduct 
+                                ? products.find(p => p.id === selectedProduct)?.name || 'Select a product...'
+                                : 'Select a product...'}
+                            </span>
+                            <ChevronDown className={`w-5 h-5 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${isProductDropdownOpen ? 'transform rotate-180' : ''}`} />
+                          </button>
+                          
+                          {isProductDropdownOpen && (
+                            <div className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-800 border-2 border-violet-200 dark:border-slate-700 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                              <div
+                                onClick={() => {
+                                  handleProductSelect('');
+                                  setFormData({
+                                    productId: '',
+                                    manualLink: '',
+                                    demoVideoLink: '',
+                                    cleaningVideoLink: ''
+                                  });
+                                }}
+                                className={`px-4 py-3 cursor-pointer transition-colors flex items-center justify-between ${
+                                  !selectedProduct
+                                    ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                }`}
+                              >
+                                <span>Select a product...</span>
+                                {!selectedProduct && <Check className="w-4 h-4" />}
+                              </div>
+                              {products
+                                .filter(p => p.isActive)
+                                .map((product) => (
+                                  <div
+                                    key={product.id}
+                                    onClick={() => handleProductSelect(product.id)}
+                                    className={`px-4 py-3 cursor-pointer transition-colors flex items-center justify-between border-t border-slate-100 dark:border-slate-700 ${
+                                      selectedProduct === product.id
+                                        ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                                        : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    <span>{product.name}</span>
+                                    {selectedProduct === product.id && <Check className="w-4 h-4" />}
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {selectedProduct && (

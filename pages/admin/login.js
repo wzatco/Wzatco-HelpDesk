@@ -20,10 +20,13 @@ export default function AdminLoginPage() {
   // Redirect if already authenticated (only once)
   useEffect(() => {
     if (isAuthenticated) {
-      const redirectPath = router.query.redirect || '/admin';
-      router.push(redirectPath);
+      const redirectPath = router.query.redirect 
+        ? decodeURIComponent(router.query.redirect) 
+        : '/admin';
+      // Use replace instead of push to prevent back button issues
+      router.replace(redirectPath);
     }
-  }, [isAuthenticated]); // Removed router from dependencies to prevent loops
+  }, [isAuthenticated, router.query.redirect]); // Include router.query.redirect in deps
 
   // Fetch captcha settings and captcha only once on mount
   useEffect(() => {
@@ -31,27 +34,81 @@ export default function AdminLoginPage() {
     
     const fetchData = async () => {
       try {
-        // Fetch both in parallel
-        const [settingsRes, captchaRes] = await Promise.all([
-          fetch('/api/admin/settings/captcha'),
-          fetch('/api/admin/captcha/generate')
-        ]);
+        // First fetch settings to check if CAPTCHA is enabled
+        const settingsRes = await fetch('/api/admin/settings/captcha');
         
         if (!mounted) return;
         
-        const settingsData = await settingsRes.json();
-        if (settingsData.success && settingsData.settings.enabledPlacements) {
-          setCaptchaEnabled(settingsData.settings.enabledPlacements.adminLogin !== false);
+        // Check if response is OK
+        if (!settingsRes.ok) {
+          console.error('Failed to fetch captcha settings:', settingsRes.status, settingsRes.statusText);
+          // If API fails, default to disabled (user preference)
+          if (mounted) {
+            setCaptchaEnabled(false);
+            setCaptcha('');
+            setCaptchaInput('');
+          }
+          return;
         }
         
-        const captchaData = await captchaRes.json();
-        if (captchaData.success) {
-          setCaptcha(captchaData.captcha);
+        const settingsData = await settingsRes.json();
+        
+        // Check if API call was successful
+        if (!settingsData.success) {
+          console.error('Captcha settings API returned error:', settingsData.message);
+          // If API returns error, default to disabled (user preference)
+          if (mounted) {
+            setCaptchaEnabled(false);
+            setCaptcha('');
+            setCaptchaInput('');
+          }
+          return;
+        }
+        
+        // Check if settings and enabledPlacements exist
+        if (!settingsData.settings || !settingsData.settings.enabledPlacements) {
+          console.warn('Captcha settings structure is invalid:', settingsData);
+          // If structure is invalid, default to disabled
+          if (mounted) {
+            setCaptchaEnabled(false);
+            setCaptcha('');
+            setCaptchaInput('');
+          }
+          return;
+        }
+        
+        // Explicitly check if adminLogin is true (not just not false)
+        const isEnabled = settingsData.settings.enabledPlacements.adminLogin === true;
+        
+        if (mounted) {
+          setCaptchaEnabled(isEnabled);
+        }
+        
+        // Only fetch captcha if it's enabled
+        if (isEnabled) {
+          const captchaRes = await fetch('/api/admin/captcha/generate');
+          if (!mounted) return;
+          
+          if (captchaRes.ok) {
+            const captchaData = await captchaRes.json();
+            if (captchaData.success && mounted) {
+              setCaptcha(captchaData.captcha);
+            }
+          }
+        } else {
+          // Clear captcha if disabled
+          if (mounted) {
+            setCaptcha('');
+            setCaptchaInput('');
+          }
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching captcha data:', error);
         if (mounted) {
-          setCaptchaEnabled(true); // Default to enabled
+          // On error, default to disabled (respect user preference)
+          setCaptchaEnabled(false);
+          setCaptcha('');
+          setCaptchaInput('');
         }
       }
     };
@@ -67,12 +124,23 @@ export default function AdminLoginPage() {
     try {
       const res = await fetch('/api/admin/settings/captcha');
       const data = await res.json();
-      if (data.success && data.settings.enabledPlacements) {
-        setCaptchaEnabled(data.settings.enabledPlacements.adminLogin !== false);
+      if (data.success && data.settings?.enabledPlacements) {
+        // Explicitly check if adminLogin is true
+        const isEnabled = data.settings.enabledPlacements.adminLogin === true;
+        setCaptchaEnabled(isEnabled);
+        
+        // If disabled, clear captcha
+        if (!isEnabled) {
+          setCaptcha('');
+          setCaptchaInput('');
+        } else if (!captcha) {
+          // If enabled but no captcha, fetch it
+          fetchCaptcha();
+        }
       }
     } catch (error) {
       console.error('Error fetching captcha settings:', error);
-      // Default to enabled if error
+      // Default to enabled if error (for security)
       setCaptchaEnabled(true);
     }
   };
@@ -106,6 +174,11 @@ export default function AdminLoginPage() {
 
     // Validate captcha only if enabled
     if (captchaEnabled) {
+      if (!captcha || !captcha.trim()) {
+        setCaptchaError('Captcha not loaded. Please refresh the page.');
+        setLoading(false);
+        return;
+      }
       if (!captchaInput || captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
         setCaptchaError('Invalid captcha. Please try again.');
         refreshCaptcha();
@@ -115,13 +188,27 @@ export default function AdminLoginPage() {
     }
 
     try {
-      const result = await login(email, password, captchaInput, captcha);
+      // Only pass captcha if enabled
+      const result = await login(
+        email, 
+        password, 
+        captchaEnabled ? captchaInput : '', 
+        captchaEnabled ? captcha : ''
+      );
       
       if (result.success) {
         setError(''); // Clear any errors
         setSuccess('Login successful! Redirecting...');
+        
+        // Get redirect URL from query parameter or default to /admin
+        // Decode the redirect parameter in case it's URL-encoded
+        const redirectPath = router.query.redirect 
+          ? decodeURIComponent(router.query.redirect) 
+          : '/admin';
+        
         setTimeout(() => {
-          router.push('/admin');
+          // Use router.replace instead of push to prevent back button issues
+          router.replace(redirectPath);
         }, 500);
       } else {
         setLoading(false);
@@ -289,8 +376,29 @@ export default function AdminLoginPage() {
   );
 }
 
-// Prevent Next.js from prefetching this page
-export const getServerSideProps = async () => {
+// Server-side check: If already authenticated, redirect to dashboard or previous page
+export const getServerSideProps = async (context) => {
+  const { req, query } = context;
+  
+  // Check if user is already authenticated
+  const { getAuthenticatedUser } = await import('../../lib/server-auth');
+  const user = await getAuthenticatedUser(req);
+  
+  if (user) {
+    // User is already logged in, redirect to previous page or dashboard
+    // Decode the redirect parameter in case it's URL-encoded
+    const redirectPath = query.redirect 
+      ? decodeURIComponent(query.redirect) 
+      : '/admin';
+    
+    return {
+      redirect: {
+        destination: redirectPath,
+        permanent: false,
+      },
+    };
+  }
+  
   return {
     props: {},
   };

@@ -1,6 +1,15 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+let prisma;
+if (process.env.NODE_ENV === 'production') {
+  prisma = new PrismaClient();
+} else {
+  if (!global.prisma) {
+    global.prisma = new PrismaClient();
+  }
+  prisma = global.prisma;
+}
 
 const SETTINGS_KEYS = {
   NOTIFICATION_ENABLED: 'notification_enabled',
@@ -53,8 +62,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching notification settings:', error);
       res.status(500).json({ success: false, message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
     }
   } else if (req.method === 'PATCH') {
     try {
@@ -99,8 +106,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error updating notification settings:', error);
       res.status(500).json({ success: false, message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
     }
   } else {
     res.status(405).json({ success: false, message: 'Method not allowed' });

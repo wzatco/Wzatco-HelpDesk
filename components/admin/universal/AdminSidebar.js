@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { LayoutDashboard, Ticket, Users, Building2, BookOpen, BarChart3, Puzzle, Settings as SettingsIcon, Plus, ChevronDown, Package, FileText, TrendingUp, Webhook, Shield, Clock, MessageCircle, GraduationCap, Phone } from 'lucide-react';
+import { useAuth } from '../../../contexts/AuthContext';
+import { LayoutDashboard, Ticket, Users, Building2, BookOpen, BarChart3, Puzzle, Settings as SettingsIcon, Plus, ChevronDown, Package, FileText, TrendingUp, Webhook, Shield, Clock, MessageCircle, GraduationCap, Phone, FileCode, MessageSquare, ClipboardList } from 'lucide-react';
 
 export default function AdminSidebar({ isOpen, onClose }) {
   const router = useRouter();
+  const { user } = useAuth();
+  const isAgentAdmin = user?.type === 'agent_admin' || user?.isAgent === true;
   // Initialize with consistent value for SSR
   const [expandedItems, setExpandedItems] = useState([]);
   const [ticketCounts, setTicketCounts] = useState({
@@ -53,13 +56,14 @@ export default function AdminSidebar({ isOpen, onClose }) {
   const sectionForPath = (path) => {
     if (path.startsWith('/admin/tickets')) return 'tickets';
     if (path.startsWith('/admin/agents')) return 'agents';
+    if (path.startsWith('/admin/chat')) return 'chat';
     if (path.startsWith('/admin/departments')) return 'departments';
     if (path.startsWith('/admin/knowledge-base')) return 'knowledge base';
     if (path.startsWith('/admin/reports')) return 'reports';
     if (path.startsWith('/admin/sla')) return 'sla management';
+    if (path.startsWith('/admin/automation')) return 'sla management';
     if (
       path.startsWith('/admin/roles') ||
-      path.startsWith('/admin/role-access') ||
       path.startsWith('/admin/users')
     )
       return 'roles';
@@ -262,16 +266,38 @@ export default function AdminSidebar({ isOpen, onClose }) {
         if (!isMounted) return;
         
         if (!response.ok) {
+          // Handle 403 (forbidden) and 500 (server error) gracefully
+          if (response.status === 403 || response.status === 500) {
+            console.warn('Cannot fetch agent counts:', response.status);
+            if (isMounted) {
+              setAgentCounts({
+                total: 0,
+                online: 0,
+                offline: 0
+              });
+              setIsLoadingAgentCounts(false);
+            }
+            return;
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
-        if (isMounted && data.summary) {
-          setAgentCounts({
-            total: data.summary.totalAgents || 0,
-            online: data.summary.onlineAgents || 0,
-            offline: data.summary.offlineAgents || 0
-          });
+        if (isMounted) {
+          if (data.summary) {
+            setAgentCounts({
+              total: data.summary.totalAgents || 0,
+              online: data.summary.onlineAgents || 0,
+              offline: data.summary.offlineAgents || 0
+            });
+          } else {
+            // If no summary, set default counts
+            setAgentCounts({
+              total: 0,
+              online: 0,
+              offline: 0
+            });
+          }
           setIsLoadingAgentCounts(false);
         }
       } catch (error) {
@@ -309,6 +335,15 @@ export default function AdminSidebar({ isOpen, onClose }) {
         if (!isMounted) return;
         
         if (!response.ok) {
+          // Handle 500 (server error) gracefully
+          if (response.status === 500) {
+            console.warn('Cannot fetch departments:', response.status);
+            if (isMounted) {
+              setDepartments([]);
+              setIsLoadingDepartments(false);
+            }
+            return;
+          }
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -365,7 +400,7 @@ export default function AdminSidebar({ isOpen, onClose }) {
       hasSubmenu: true,
       submenu: [
         { name: 'All Tickets', href: '/admin/tickets', count: isLoadingCounts ? '...' : ticketCounts.total },
-            { name: 'Tickets Assigned to Me', href: '/admin/tickets/assigned-to-me' },
+            { name: 'My Tickets', href: '/admin/tickets/assigned-to-me' },
         { name: 'Open Tickets', href: '/admin/tickets?status=open', count: isLoadingCounts ? '...' : ticketCounts.open },
         { name: 'Pending', href: '/admin/tickets?status=pending', count: isLoadingCounts ? '...' : ticketCounts.pending },
         { name: 'Resolved', href: '/admin/tickets?status=resolved', count: isLoadingCounts ? '...' : ticketCounts.resolved },
@@ -382,22 +417,33 @@ export default function AdminSidebar({ isOpen, onClose }) {
       submenu: [
         { name: 'All Agents', href: '/admin/agents', count: isLoadingAgentCounts ? '...' : agentCounts.total },
         { name: 'Online', href: '/admin/agents?status=online', count: isLoadingAgentCounts ? '...' : agentCounts.online },
-        { name: 'Offline', href: '/admin/agents?status=offline', count: isLoadingAgentCounts ? '...' : agentCounts.offline }
+        { name: 'Offline', href: '/admin/agents?status=offline', count: isLoadingAgentCounts ? '...' : agentCounts.offline },
+        { name: 'Leaves', href: '/admin/agents/leaves' }
       ]
+    },
+    {
+      name: 'Internal Chat',
+      href: '/admin/chat',
+      icon: 'chat',
+      current: router.pathname.startsWith('/admin/chat')
     },
     {
       name: 'Role',
       href: '/admin/roles',
       icon: 'shield',
+      current: router.pathname.startsWith('/admin/roles'),
+      hasSubmenu: false
+    },
+    {
+      name: 'Users',
+      href: '/admin/users/system-users',
+      icon: 'users',
       current:
-        router.pathname.startsWith('/admin/roles') ||
-        router.pathname.startsWith('/admin/role-access') ||
         router.pathname.startsWith('/admin/users'),
       hasSubmenu: true,
       submenu: [
-        { name: 'Role List', href: '/admin/roles' },
-        { name: 'Role Access', href: '/admin/role-access' },
-        { name: 'Users', href: '/admin/users' }
+        { name: 'System Users', href: '/admin/users/system-users' },
+        { name: 'Customers', href: '/admin/users/customers' }
       ]
     },
     {
@@ -408,16 +454,40 @@ export default function AdminSidebar({ isOpen, onClose }) {
       hasSubmenu: true,
       submenu: [
         { name: 'All Departments', href: '/admin/departments' },
-        { name: 'Sales & Operations', href: '/admin/departments?sales=true' },
-        { name: 'Technical Support', href: '/admin/departments?technical=true' },
         ...(isLoadingDepartments
           ? [{ name: 'Loading...', href: '#', disabled: true }]
-          : departments
-              .filter((dept) => !['Sales & Operations', 'Technical Support'].includes(dept.name))
-              .map((dept) => ({
-                name: dept.name,
-                href: `/admin/departments?id=${dept.id}`
-              }))
+          : (() => {
+              // Find specific departments by name
+              const salesDept = departments.find(dept => dept.name === 'Sales & Operations');
+              const techDept = departments.find(dept => dept.name === 'Technical Support');
+              
+              // Build submenu with specific departments first, then others
+              const submenuItems = [];
+              
+              if (salesDept) {
+                submenuItems.push({
+                  name: 'Sales & Operations',
+                  href: `/admin/departments/${salesDept.id}`
+                });
+              }
+              
+              if (techDept) {
+                submenuItems.push({
+                  name: 'Technical Support',
+                  href: `/admin/departments/${techDept.id}`
+                });
+              }
+              
+              // Add other departments (excluding the ones already added)
+              const otherDepartments = departments
+                .filter((dept) => !['Sales & Operations', 'Technical Support'].includes(dept.name))
+                .map((dept) => ({
+                  name: dept.name,
+                  href: `/admin/departments/${dept.id}`
+                }));
+              
+              return [...submenuItems, ...otherDepartments];
+            })()
         )
       ]
     },
@@ -470,15 +540,21 @@ export default function AdminSidebar({ isOpen, onClose }) {
       name: 'SLA Management',
       href: '/admin/sla',
       icon: 'clock',
-      current: router.pathname.startsWith('/admin/sla'),
+      current: router.pathname.startsWith('/admin/sla') || router.pathname.startsWith('/admin/automation'),
       hasSubmenu: true,
       submenu: [
         { name: 'Dashboard', href: '/admin/sla' },
         { name: 'Policies', href: '/admin/sla/policies' },
-        { name: 'Workflows', href: '/admin/sla/workflows' },
+        { name: 'Automation', href: '/admin/automation' },
         { name: 'Active Timers', href: '/admin/sla?tab=active' },
         { name: 'Reports & Analytics', href: '/admin/sla/reports' }
       ]
+    },
+    {
+      name: 'Worklog Reasons',
+      href: '/admin/worklogs/reasons',
+      icon: 'clipboard',
+      current: router.pathname.startsWith('/admin/worklogs/reasons')
     },
     {
       name: 'Integrations',
@@ -487,20 +563,29 @@ export default function AdminSidebar({ isOpen, onClose }) {
       current: router.pathname.startsWith('/admin/integrations')
     },
     {
+      name: 'Macros',
+      href: '/admin/macros',
+      icon: 'macros',
+      current: router.pathname.startsWith('/admin/macros')
+    },
+    {
       name: 'Settings',
       href: '/admin/settings',
       icon: 'settings',
       current: router.pathname.startsWith('/admin/settings'),
       hasSubmenu: true,
       submenu: [
-        { name: 'Basic Settings', href: '/admin/settings#basic-settings' },
-        { name: 'Captcha Settings', href: '/admin/settings#captcha-settings' },
-        { name: 'AI Settings', href: '/admin/settings#ai-settings' },
-        { name: 'File Upload Settings', href: '/admin/settings#file-upload-settings' },
-        { name: 'Ticket Settings', href: '/admin/settings#ticket-settings' },
-        { name: 'Notification Settings', href: '/admin/settings#notification-settings' },
-        { name: 'Security Settings', href: '/admin/settings#security-settings' },
-        { name: 'Email Settings', href: '/admin/settings/email' }
+        { name: 'Basic Settings', href: '/admin/settings/basic' },
+        { name: 'Captcha Settings', href: '/admin/settings/captcha' },
+        { name: 'AI Settings', href: '/admin/settings/ai' },
+        { name: 'File Upload Settings', href: '/admin/settings/file-upload' },
+        { name: 'Ticket Settings', href: '/admin/settings/ticket' },
+        { name: 'Assignment Settings', href: '/admin/settings/assignment' },
+        { name: 'Notification Settings', href: '/admin/settings/notification' },
+        { name: 'Security Settings', href: '/admin/settings/security' },
+        { name: 'Email Settings', href: '/admin/settings/email' },
+        { name: 'Integrations Settings', href: '/admin/settings/integrations' },
+        { name: 'Canned Responses', href: '/admin/settings/canned-responses' }
       ]
     }
   ];
@@ -545,10 +630,13 @@ export default function AdminSidebar({ isOpen, onClose }) {
                         {item.icon === 'file-text' && <FileText className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'trending-up' && <TrendingUp className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'puzzle' && <Puzzle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                        {item.icon === 'macros' && <FileCode className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'kb' && <BookOpen className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'reports' && <BarChart3 className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'clock' && <Clock className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                        {item.icon === 'clipboard' && <ClipboardList className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'message-circle' && <MessageCircle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                        {item.icon === 'chat' && <MessageSquare className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'widgets' && <Puzzle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'settings' && <SettingsIcon className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                         {item.icon === 'shield' && <Shield className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
@@ -636,10 +724,13 @@ export default function AdminSidebar({ isOpen, onClose }) {
                       {item.icon === 'file-text' && <FileText className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'trending-up' && <TrendingUp className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'puzzle' && <Puzzle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                      {item.icon === 'macros' && <FileCode className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'kb' && <BookOpen className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'reports' && <BarChart3 className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'clock' && <Clock className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                      {item.icon === 'clipboard' && <ClipboardList className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'message-circle' && <MessageCircle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
+                      {item.icon === 'chat' && <MessageSquare className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'widgets' && <Puzzle className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'settings' && <SettingsIcon className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}
                       {item.icon === 'shield' && <Shield className={`w-5 h-5 mr-3 ${item.current ? 'text-violet-600' : 'text-slate-400'}`} />}

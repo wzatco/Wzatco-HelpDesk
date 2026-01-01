@@ -153,8 +153,8 @@ export default function SearchPage() {
                     <div className="divide-y divide-slate-200 dark:divide-slate-700">
                       {results.tickets.map((ticket) => (
                         <Link
-                          key={ticket.id}
-                          href={`/admin/tickets/${ticket.id}`}
+                          key={ticket.ticketNumber}
+                          href={`/admin/tickets/${ticket.ticketNumber}`}
                           className="block p-5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                         >
                           <div className="flex items-start justify-between">
@@ -192,7 +192,7 @@ export default function SearchPage() {
                                 </span>
                               </div>
                               <div className="mt-2 text-xs font-mono text-slate-500 dark:text-slate-400">
-                                #{ticket.id}
+                                #{ticket.ticketNumber}
                               </div>
                             </div>
                           </div>

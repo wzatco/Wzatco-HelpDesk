@@ -75,8 +75,7 @@ export default async function handler(req, res) {
           contentType: contentType === 'html' ? 'html' : 'richtext',
           slug,
           categoryId: category || null,
-          status: status || 'draft',
-          tags: tags && tags.length > 0 ? JSON.stringify(tags) : null,
+          status: status || existingArticle.status, // Allow admin to change status (pending → published)\n          tags: tags && tags.length > 0 ? JSON.stringify(tags) : null,
           isPublic: isPublic !== false,
           updatedByName: adminName
         },

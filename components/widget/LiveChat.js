@@ -48,12 +48,18 @@ export default function LiveChat({ userInfo, onBack, onChatEnd }) {
       ? window.location.origin
       : 'http://localhost:3000';
 
+    // Get token from localStorage if available
+    const token = typeof window !== 'undefined' ? localStorage.getItem('widget_token') : null;
+
     const newSocket = io(socketUrl, {
       path: '/api/widget/socket',
       transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      auth: {
+        token: token // Sending null is safe; the server handles it
+      }
     });
 
     newSocket.on('connect', () => {
@@ -272,9 +278,11 @@ export default function LiveChat({ userInfo, onBack, onChatEnd }) {
           </div>
         )}
 
-        {messages.map((message) => {
+        {messages.map((message, index) => {
           const isCustomer = message.senderType === 'customer';
           const isSystem = message.senderType === 'system';
+          const isAgent = message.senderType === 'agent';
+          const isAdmin = message.senderType === 'admin';
 
           if (isSystem) {
             return (
@@ -284,22 +292,62 @@ export default function LiveChat({ userInfo, onBack, onChatEnd }) {
             );
           }
 
+          // Get sender name
+          const getSenderName = () => {
+            if (isCustomer) {
+              return message.senderName || userInfo?.name || 'You';
+            }
+            if (isAdmin) {
+              return message.senderName || 'Admin';
+            }
+            if (isAgent) {
+              return message.senderName || 'Agent';
+            }
+            return 'Unknown';
+          };
+
+          const senderName = getSenderName();
+          
+          // Show sender name if different from previous message
+          const prevMessage = index > 0 ? messages[index - 1] : null;
+          const showSenderName = !prevMessage || 
+            prevMessage.senderType !== message.senderType ||
+            prevMessage.senderId !== message.senderId;
+
           return (
             <div
               key={message.id}
-              className={`flex ${isCustomer ? 'justify-end' : 'justify-start'}`}
+              className={`flex flex-col ${isCustomer ? 'items-end' : 'items-start'} mb-1`}
             >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                  isCustomer
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-white'
-                }`}
-              >
-                <p className="text-sm">{message.content}</p>
-                <p className={`text-xs mt-1 ${isCustomer ? 'text-blue-100' : 'text-gray-300'}`}>
-                  {formatTime(message.timestamp)}
-                </p>
+              {/* Sender Name Label */}
+              {showSenderName && (
+                <div className={`mb-1 px-2 ${isCustomer ? 'pr-4' : 'pl-4'}`}>
+                  <span className={`text-xs font-semibold ${
+                    isAdmin 
+                      ? 'text-violet-400' 
+                      : isAgent 
+                        ? 'text-blue-400'
+                        : 'text-blue-300'
+                  }`}>
+                    {senderName}
+                    {isAdmin && ' (Admin)'}
+                    {isAgent && !isAdmin && ' (Agent)'}
+                  </span>
+                </div>
+              )}
+              <div className={`flex ${isCustomer ? 'justify-end' : 'justify-start'} w-full`}>
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+                    isCustomer
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-white'
+                  }`}
+                >
+                  <p className="text-sm">{message.content}</p>
+                  <p className={`text-xs mt-1 ${isCustomer ? 'text-blue-100' : 'text-gray-300'}`}>
+                    {formatTime(message.timestamp)}
+                  </p>
+                </div>
               </div>
             </div>
           );

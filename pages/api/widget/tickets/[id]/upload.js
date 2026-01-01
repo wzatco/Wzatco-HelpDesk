@@ -3,7 +3,10 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export const config = {
   api: {
@@ -28,7 +31,7 @@ export default async function handler(req, res) {
 
     // Verify ticket exists
     const ticket = await prisma.conversation.findUnique({
-      where: { id: ticketId }
+      where: { ticketNumber: ticketId }
     });
 
     if (!ticket) {

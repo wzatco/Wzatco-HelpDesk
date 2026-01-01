@@ -1,7 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -114,8 +117,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Error testing webhook:', error);
     res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

@@ -1,8 +1,31 @@
 import { PrismaClient } from '@prisma/client';
+import { getCurrentUserId } from '@/lib/auth';
+import { checkPermissionOrFail } from '@/lib/permissions';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+let prisma;
+if (process.env.NODE_ENV === 'production') {
+  prisma = new PrismaClient();
+} else {
+  if (!global.prisma) {
+    global.prisma = new PrismaClient();
+  }
+  prisma = global.prisma;
+}
 
 export default async function handler(req, res) {
+  const userId = getCurrentUserId(req);
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    await checkPermissionOrFail(userId, 'admin.tickets', res);
+  } catch (permError) {
+    return res.status(403).json({ message: 'Permission denied' });
+  }
+
   if (req.method === 'GET') {
     try {
       const rules = await prisma.assignmentRule.findMany({
@@ -12,22 +35,41 @@ export default async function handler(req, res) {
         ]
       });
 
-      return res.status(200).json({ rules });
+      return res.status(200).json({
+        success: true,
+        rules: rules.map(rule => ({
+          ...rule,
+          config: rule.config ? JSON.parse(rule.config) : {}
+        }))
+      });
     } catch (error) {
       console.error('Error fetching assignment rules:', error);
-      return res.status(500).json({ message: 'Error fetching assignment rules', error: error.message });
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch assignment rules',
+        error: error.message
+      });
     }
-  } else if (req.method === 'POST') {
+  }
+
+  if (req.method === 'POST') {
     try {
       const { name, ruleType, priority, enabled, config, description } = req.body;
 
       if (!name || !ruleType) {
-        return res.status(400).json({ message: 'Name and ruleType are required' });
+        return res.status(400).json({
+          success: false,
+          message: 'Name and rule type are required'
+        });
       }
 
-      const validRuleTypes = ['round_robin', 'load_based', 'department_match', 'skill_match'];
+      // Validate rule type
+      const validRuleTypes = ['direct_assignment', 'round_robin', 'manual', 'load_based', 'skill_match'];
       if (!validRuleTypes.includes(ruleType)) {
-        return res.status(400).json({ message: 'Invalid ruleType' });
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid rule type'
+        });
       }
 
       const rule = await prisma.assignmentRule.create({
@@ -41,14 +83,22 @@ export default async function handler(req, res) {
         }
       });
 
-      return res.status(201).json({ rule });
+      return res.status(201).json({
+        success: true,
+        rule: {
+          ...rule,
+          config: rule.config ? JSON.parse(rule.config) : {}
+        }
+      });
     } catch (error) {
       console.error('Error creating assignment rule:', error);
-      return res.status(500).json({ message: 'Error creating assignment rule', error: error.message });
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create assignment rule',
+        error: error.message
+      });
     }
-  } else {
-    res.setHeader('Allow', ['GET', 'POST']);
-    return res.status(405).json({ message: `Method ${req.method} not allowed` });
   }
-}
 
+  return res.status(405).json({ message: 'Method not allowed' });
+}

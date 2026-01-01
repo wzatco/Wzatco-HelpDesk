@@ -132,7 +132,7 @@ export default function CallbacksPage() {
     try {
       setSubmitting(true);
       const response = await fetch(`/api/admin/callbacks/${selectedCallback.id}/assign`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentId: selectedAgentId })
       });
@@ -155,10 +155,15 @@ export default function CallbacksPage() {
     }
   };
 
-  const handleApprove = async () => {
+  const handleApprove = async (callback = selectedCallback) => {
+    if (!callback || !callback.id) {
+      showNotification('error', 'No callback selected');
+      return;
+    }
+
     try {
       setSubmitting(true);
-      const response = await fetch(`/api/admin/callbacks/${selectedCallback.id}/approve`, {
+      const response = await fetch(`/api/admin/callbacks/${callback.id}/approve`, {
         method: 'POST'
       });
 
@@ -410,6 +415,14 @@ export default function CallbacksPage() {
                             )}
                           </div>
 
+                          {callback.reason && (
+                            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                              <p className="text-sm text-blue-700 dark:text-blue-300">
+                                <strong className="font-semibold">📝 Reason for Callback:</strong> {callback.reason}
+                              </p>
+                            </div>
+                          )}
+
                           {callback.denialReason && (
                             <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                               <p className="text-sm text-red-700 dark:text-red-300">
@@ -426,7 +439,7 @@ export default function CallbacksPage() {
                                 size="sm"
                                 onClick={() => {
                                   setSelectedCallback(callback);
-                                  handleApprove();
+                                  handleApprove(callback);
                                 }}
                                 className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-500 text-white px-4 py-2 rounded-xl font-medium transition-all shadow-sm hover:shadow-md flex items-center gap-2"
                                 disabled={submitting}

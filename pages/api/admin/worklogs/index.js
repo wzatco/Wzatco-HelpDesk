@@ -6,20 +6,18 @@ const prisma = new PrismaClient();
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
-      const { conversationId, agentId, startDate, endDate, source } = req.query;
+      const { conversationId, ticketNumber, agentId, startDate, endDate } = req.query;
 
       const where = {};
       
-      if (conversationId) {
-        where.conversationId = conversationId;
+      // Support both conversationId (legacy) and ticketNumber query params
+      const ticketId = ticketNumber || conversationId;
+      if (ticketId) {
+        where.ticketNumber = ticketId;
       }
       
       if (agentId) {
         where.agentId = agentId;
-      }
-      
-      if (source) {
-        where.source = source;
       }
       
       if (startDate || endDate) {
@@ -35,7 +33,7 @@ export default async function handler(req, res) {
       const worklogs = await prisma.worklog.findMany({
         where,
         include: {
-          Agent: {
+          agent: {
             select: {
               id: true,
               name: true,
@@ -43,9 +41,9 @@ export default async function handler(req, res) {
               slug: true
             }
           },
-          Conversation: {
+          ticket: {
             select: {
-              id: true,
+              ticketNumber: true,
               subject: true,
               status: true,
               priority: true
@@ -68,8 +66,11 @@ export default async function handler(req, res) {
           duration = Math.floor((new Date() - new Date(worklog.startedAt)) / 1000);
         }
 
+        // Map new relation names to legacy names for backward compatibility
         return {
           ...worklog,
+          Agent: worklog.agent, // Legacy compatibility
+          Conversation: worklog.ticket, // Legacy compatibility
           durationSeconds: duration,
           durationFormatted: formatDuration(duration)
         };
@@ -92,18 +93,20 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
-      const { conversationId, agentId, startedAt, endedAt, description, source = 'manual' } = req.body;
+      // Support both conversationId (legacy) and ticketNumber
+      const { conversationId, ticketNumber, agentId, startedAt, endedAt, stopReason, isSystemAuto = false } = req.body;
+      const ticketId = ticketNumber || conversationId;
 
-      if (!conversationId || !agentId) {
+      if (!ticketId || !agentId) {
         return res.status(400).json({
           success: false,
-          message: 'conversationId and agentId are required'
+          message: 'ticketNumber (or conversationId) and agentId are required'
         });
       }
 
       // Verify conversation exists
       const conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId }
+        where: { ticketNumber: ticketId }
       });
 
       if (!conversation) {
@@ -128,23 +131,23 @@ export default async function handler(req, res) {
       const startTime = startedAt ? new Date(startedAt) : new Date();
       const endTime = endedAt ? new Date(endedAt) : null;
 
-      let durationSeconds = null;
+      let durationSeconds = 0;
       if (endTime) {
         durationSeconds = Math.floor((endTime - startTime) / 1000);
       }
 
       const worklog = await prisma.worklog.create({
         data: {
-          conversationId,
+          ticketNumber: ticketId,
           agentId,
           startedAt: startTime,
           endedAt: endTime,
           durationSeconds,
-          source,
-          description: description || null
+          stopReason: stopReason || null,
+          isSystemAuto
         },
         include: {
-          Agent: {
+          agent: {
             select: {
               id: true,
               name: true,
@@ -152,9 +155,9 @@ export default async function handler(req, res) {
               slug: true
             }
           },
-          Conversation: {
+          ticket: {
             select: {
-              id: true,
+              ticketNumber: true,
               subject: true,
               status: true,
               priority: true
@@ -164,12 +167,14 @@ export default async function handler(req, res) {
       });
 
       // Update TAT metrics for the conversation
-      await updateTATMetrics(prisma, conversationId);
+      await updateTATMetrics(prisma, ticketId);
 
       return res.status(201).json({
         success: true,
         worklog: {
           ...worklog,
+          Agent: worklog.agent, // Legacy compatibility
+          Conversation: worklog.ticket, // Legacy compatibility
           durationFormatted: worklog.durationSeconds ? formatDuration(worklog.durationSeconds) : 'Active'
         }
       });

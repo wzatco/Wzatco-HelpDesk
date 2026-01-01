@@ -6,6 +6,12 @@ import { createPortal } from 'react-dom';
 import { Ticket, ArrowLeft, Clock, CheckCircle, XCircle, X, Send, User, UserCheck, Building2, Calendar, MessageSquare, AlertCircle, Tag, Paperclip, Image as ImageIcon, File, X as XIcon, Reply } from 'lucide-react';
 import { io } from 'socket.io-client';
 import EmojiPicker from './EmojiPicker';
+import TicketFeedback from './TicketFeedback';
+import FeedbackSystemMessage from './FeedbackSystemMessage';
+import KBArticleCard from '../../universal/chat/KBArticleCard';
+import ArticleViewerModal from '../../universal/chat/ArticleViewerModal';
+import MacroAutocomplete from '../../universal/chat/MacroAutocomplete';
+import { formatMessageContent } from '../../../utils/textFormatting';
 
 export default function TicketsView({ userInfo, onBack }) {
   const [tickets, setTickets] = useState([]);
@@ -20,18 +26,31 @@ export default function TicketsView({ userInfo, onBack }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null); // { file, previewUrl, type, name }
   const [isUploading, setIsUploading] = useState(false);
+  const [viewingArticle, setViewingArticle] = useState(null);
   const [fileSizeError, setFileSizeError] = useState(null); // { fileSizeMB: string }
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const messageTextareaRef = useRef(null);
   const socketRef = useRef(null);
   const [socketConnected, setSocketConnected] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
+    if (userInfo?.email) {
     fetchTickets();
+    } else {
+      console.warn('⚠️ TicketsView: userInfo.email is missing, cannot fetch tickets');
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userInfo?.email]);
 
+  useEffect(() => {
     // Initialize Socket.IO connection
+    // Get token from localStorage if available
+    const token = typeof window !== 'undefined' ? localStorage.getItem('widget_token') : null;
+
     const socket = io({
       path: '/api/widget/socket',
       transports: ['websocket', 'polling'],
@@ -39,6 +58,9 @@ export default function TicketsView({ userInfo, onBack }) {
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
+      auth: {
+        token: token // Sending null is safe; the server handles it
+      }
     });
 
     socket.on('connect', () => {
@@ -70,13 +92,13 @@ export default function TicketsView({ userInfo, onBack }) {
       // Join room for this ticket
       if (socket.connected) {
         console.log(`🔌 Widget: Joining room ticket_${selectedTicket.id}`);
-        socket.emit('join_room', { conversationId: selectedTicket.id });
+        socket.emit('join_room', { conversationId: selectedTicket.ticketNumber });
         fetchTicketDetails(selectedTicket.id);
       } else {
         // Wait for connection
         const connectHandler = () => {
           console.log(`🔌 Widget: Connected, joining room ticket_${selectedTicket.id}`);
-          socket.emit('join_room', { conversationId: selectedTicket.id });
+          socket.emit('join_room', { conversationId: selectedTicket.ticketNumber });
           fetchTicketDetails(selectedTicket.id);
           socket.off('connect', connectHandler);
         };
@@ -93,7 +115,7 @@ export default function TicketsView({ userInfo, onBack }) {
         }
         
         // Only process messages for this conversation
-        if (messageData.conversationId === selectedTicket.id) {
+        if (messageData.conversationId === selectedTicket.ticketNumber) {
           setTicketDetails(prev => {
             if (!prev) return prev;
             
@@ -133,7 +155,7 @@ export default function TicketsView({ userInfo, onBack }) {
       return () => {
         // Leave room when ticket is deselected
         if (socket.connected) {
-          socket.emit('leave_ticket_room', { ticketId: selectedTicket.id });
+          socket.emit('leave_ticket_room', { ticketId: selectedTicket.ticketNumber });
         }
         socket.off('receive_message', handleReceiveMessage);
       };
@@ -149,13 +171,32 @@ export default function TicketsView({ userInfo, onBack }) {
   const fetchTickets = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/widget/tickets?email=${encodeURIComponent(userInfo?.email)}`);
+      if (!userInfo?.email) {
+        console.error('❌ TicketsView: No email found in userInfo', userInfo);
+        setTickets([]);
+        setLoading(false);
+        return;
+      }
+
+      const email = userInfo.email;
+      console.log('🔍 TicketsView: Fetching tickets for email:', email);
+      
+      const response = await fetch(`/api/widget/tickets?email=${encodeURIComponent(email)}`);
+      console.log('📡 TicketsView: API response status:', response.status);
+      
       const data = await response.json();
+      console.log('📋 TicketsView: API response data:', data);
+      
       if (data.success) {
+        console.log(`✅ TicketsView: Found ${data.tickets?.length || 0} tickets`);
         setTickets(data.tickets || []);
+      } else {
+        console.error('❌ TicketsView: API returned success:false', data);
+        setTickets([]);
       }
     } catch (error) {
-      console.error('Error fetching tickets:', error);
+      console.error('❌ TicketsView: Error fetching tickets:', error);
+      setTickets([]);
     } finally {
       setLoading(false);
     }
@@ -164,13 +205,34 @@ export default function TicketsView({ userInfo, onBack }) {
   const fetchTicketDetails = async (ticketId) => {
     setLoadingDetails(true);
     try {
-      const response = await fetch(`/api/widget/tickets/${ticketId}?email=${userInfo?.email}`);
+      if (!ticketId) {
+        console.error('❌ TicketsView: No ticket ID provided to fetchTicketDetails');
+        setLoadingDetails(false);
+        return;
+      }
+
+      if (!userInfo?.email) {
+        console.error('❌ TicketsView: No email found in userInfo for fetchTicketDetails');
+        setLoadingDetails(false);
+        return;
+      }
+
+      console.log('🔍 TicketsView: Fetching ticket details for ID:', ticketId, 'email:', userInfo.email);
+      
+      const response = await fetch(`/api/widget/tickets/${ticketId}?email=${encodeURIComponent(userInfo.email)}`);
+      console.log('📡 TicketsView: Ticket details API response status:', response.status);
+      
       const data = await response.json();
+      console.log('📋 TicketsView: Ticket details API response:', data);
+      
       if (data.success) {
+        console.log('✅ TicketsView: Ticket details loaded successfully');
         setTicketDetails(data.ticket);
+      } else {
+        console.error('❌ TicketsView: API returned success:false for ticket details', data);
       }
     } catch (error) {
-      console.error('Error fetching ticket details:', error);
+      console.error('❌ TicketsView: Error fetching ticket details:', error);
     } finally {
       setLoadingDetails(false);
     }
@@ -335,10 +397,18 @@ export default function TicketsView({ userInfo, onBack }) {
     try {
       setSendingMessage(true);
 
+      // Build replyTo object for payload
+      const replyToObject = replyingTo ? {
+        id: replyingTo.id,
+        content: replyingTo.content,
+        senderType: replyingTo.senderType,
+        senderName: replyingTo.senderName || (replyingTo.senderType === 'customer' ? 'You' : 'Support Agent')
+      } : null;
+
       // Create payload with socketId for exclusion
       // Allow empty content if there's an attachment
       const payload = {
-        conversationId: selectedTicket.id,
+        conversationId: selectedTicket.ticketNumber,
         content: messageContent || '', // Empty string is allowed if metadata exists
         senderId: customerId,
         senderType: 'customer',
@@ -346,6 +416,7 @@ export default function TicketsView({ userInfo, onBack }) {
         socketId: socket.id, // CRITICAL: Include socket ID for exclusion
         metadata: attachmentMetadata || undefined,
         replyToId: replyingTo?.id || null,
+        replyTo: replyToObject || undefined // Include full replyTo object for immediate broadcast
       };
 
       console.log('📤 Widget: Sending message via Socket.IO:', payload);
@@ -540,7 +611,7 @@ export default function TicketsView({ userInfo, onBack }) {
             <div className="space-y-2 sm:space-y-3">
               {tickets.map((ticket) => (
                 <div
-                  key={ticket.id}
+                  key={ticket.ticketNumber || ticket.id}
                   onClick={() => setSelectedTicket(ticket)}
                   className="p-3 sm:p-4 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-700 transition-colors cursor-pointer"
                 >
@@ -556,7 +627,7 @@ export default function TicketsView({ userInfo, onBack }) {
                           setSelectedTicket(ticket);
                         }}
                       >
-                        {ticket.subject || `Ticket #${ticket.id}`}
+                        {ticket.subject || `Ticket #${ticket.ticketNumber || ticket.id}`}
                       </h3>
                       <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                         {ticket.description || 'No description'}
@@ -568,7 +639,7 @@ export default function TicketsView({ userInfo, onBack }) {
                     </div>
                   </div>
                   <div className="flex items-center justify-between mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    <span className="truncate">#{ticket.id.slice(-8)}</span>
+                    <span className="truncate">#{ticket.ticketNumber}</span>
                     <span className="ml-2 flex-shrink-0">{formatDate(ticket.createdAt)}</span>
                   </div>
                 </div>
@@ -649,17 +720,17 @@ export default function TicketsView({ userInfo, onBack }) {
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
                   {tickets.map((ticket) => (
                     <div
-                      key={ticket.id}
+                      key={ticket.ticketNumber || ticket.id}
                       onClick={() => setSelectedTicket(ticket)}
                       className={`p-3 rounded-xl cursor-pointer transition-all ${
-                        selectedTicket.id === ticket.id
+                        selectedTicket.ticketNumber === ticket.ticketNumber
                           ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg border-2 border-violet-400'
                           : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
                       }`}
                     >
                       <div className="flex items-start justify-between mb-1.5">
                         <h4 className={`text-xs font-semibold line-clamp-2 flex-1 ${
-                          selectedTicket.id === ticket.id ? 'text-white' : 'text-slate-900 dark:text-white'
+                          selectedTicket.ticketNumber === ticket.ticketNumber ? 'text-white' : 'text-slate-900 dark:text-white'
                         }`}>
                           {ticket.subject || `Ticket #${ticket.id.slice(-8)}`}
                         </h4>
@@ -670,12 +741,12 @@ export default function TicketsView({ userInfo, onBack }) {
                         )}
                       </div>
                       <p className={`text-[10px] line-clamp-2 mb-1.5 ${
-                        selectedTicket.id === ticket.id ? 'text-white/80' : 'text-slate-600 dark:text-slate-400'
+                        selectedTicket.ticketNumber === ticket.ticketNumber ? 'text-white/80' : 'text-slate-600 dark:text-slate-400'
                       }`}>
                         {ticket.description || 'No description'}
                       </p>
                       <p className={`text-[10px] ${
-                        selectedTicket.id === ticket.id ? 'text-white/70' : 'text-slate-500 dark:text-slate-500'
+                        selectedTicket.ticketNumber === ticket.ticketNumber ? 'text-white/70' : 'text-slate-500 dark:text-slate-500'
                       }`}>
                         {formatDate(ticket.createdAt)}
                       </p>
@@ -751,7 +822,7 @@ export default function TicketsView({ userInfo, onBack }) {
                             <Tag className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                             <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">Ticket ID</span>
                           </div>
-                          <p className="text-xs font-semibold text-slate-900 dark:text-white font-mono leading-tight">#{ticketDetails.id.slice(-12)}</p>
+                          <p className="text-xs font-semibold text-slate-900 dark:text-white font-mono leading-tight">#{ticketDetails.ticketNumber || ticketDetails.id}</p>
                         </div>
                       </div>
                     </div>
@@ -775,9 +846,38 @@ export default function TicketsView({ userInfo, onBack }) {
                         {ticketDetails.messages && ticketDetails.messages.length > 0 ? (
                           ticketDetails.messages.map((message, index) => {
                             const isCustomer = message.senderType === 'customer';
+                            const isAdmin = message.senderType === 'admin';
+                            const isAgent = message.senderType === 'agent';
+                            const isAdminOrAgent = isAdmin || isAgent;
                             const prevMessage = index > 0 ? ticketDetails.messages[index - 1] : null;
                             const nextMessage = index < ticketDetails.messages.length - 1 ? ticketDetails.messages[index + 1] : null;
                             const isSameSender = prevMessage && prevMessage.senderType === message.senderType;
+                            
+                            // Get sender name - extract first name for admin/agent
+                            const getSenderName = () => {
+                              if (isCustomer) {
+                                return 'You';
+                              }
+                              if (isAdmin || isAgent) {
+                                const fullName = message.senderName || '';
+                                if (fullName) {
+                                  // Extract first name (split by space and take first part)
+                                  const firstName = fullName.trim().split(' ')[0];
+                                  return firstName || fullName;
+                                }
+                                return isAdmin ? 'Admin' : 'Agent';
+                              }
+                              return 'Support';
+                            };
+                            
+                            const senderName = getSenderName();
+                            
+                            // Show sender name if different from previous message or if it's from agent/admin
+                            const showSenderName = !prevMessage || 
+                              prevMessage.senderType !== message.senderType ||
+                              prevMessage.senderId !== message.senderId ||
+                              (prevMessage.senderType === 'customer' && message.senderType !== 'customer') ||
+                              (prevMessage.senderType !== 'customer' && message.senderType === 'customer');
                             
                             // Show date divider when date changes or it's the first message
                             const showTime = (() => {
@@ -809,6 +909,9 @@ export default function TicketsView({ userInfo, onBack }) {
                               return currentDateStr !== prevDateStr;
                             })();
                             
+                            // Check if this is a KB article - render as standalone card
+                            const isKBArticle = message.metadata?.type === 'kb_article';
+                            
                             return (
                               <div key={message.id} className="mb-0.5">
                                 {showTime && (
@@ -818,112 +921,174 @@ export default function TicketsView({ userInfo, onBack }) {
                                     </span>
                                   </div>
                                 )}
-                                <div
-                                  className={`flex ${isCustomer ? 'justify-end' : 'justify-start'} mb-0.5 group`}
-                                >
-                                  <div className={`flex items-end gap-1 max-w-[85%] sm:max-w-[75%] ${isCustomer ? 'flex-row-reverse' : 'flex-row'}`}>
-                                    {/* WhatsApp-style message bubble */}
-                                    <div
-                                      className={`relative px-2.5 py-1.5 sm:px-3 sm:py-2 ${
-                                        isCustomer
-                                          ? 'bg-[#DCF8C6] dark:bg-[#005C4B] text-gray-900 dark:text-white'
-                                          : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white shadow-[0_1px_0.5px_rgba(0,0,0,0.13)]'
-                                      }`}
-                                      style={{
-                                        borderRadius: isCustomer
-                                          ? isSameSender && prevMessage?.senderType === 'customer'
-                                            ? '7.5px 7.5px 1.5px 7.5px' // Connected to previous
-                                            : '7.5px 7.5px 1.5px 7.5px' // First in group with tail
-                                          : isSameSender && prevMessage?.senderType !== 'customer'
-                                            ? '7.5px 7.5px 7.5px 1.5px' // Connected to previous
-                                            : '7.5px 7.5px 7.5px 1.5px' // First in group with tail
-                                      }}
-                                    >
-                                      {/* Reply preview if message is a reply */}
-                                      {message.replyTo && (
-                                        <div 
-                                          className={`mb-2 p-2 rounded border-l-4 ${
-                                            isCustomer
-                                              ? 'bg-white/30 dark:bg-white/10 border-white/50'
-                                              : 'bg-gray-100 dark:bg-slate-700 border-gray-300 dark:border-slate-600'
-                                          }`}
-                                        >
-                                          <div className="text-xs font-semibold opacity-80 mb-1">
-                                            {message.replyTo.senderType === 'customer' ? 'You' : (message.replyTo.senderName || 'Support Agent')}
-                                          </div>
-                                          <div className="text-xs opacity-70 line-clamp-2">
-                                            {message.replyTo.content || 'Message'}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* Attachment Preview */}
-                                      {message.metadata && message.metadata.type && (
-                                        <div className="mb-2">
-                                          {message.metadata.type === 'image' && (
-                                            <img 
-                                              src={message.metadata.url} 
-                                              alt={message.metadata.fileName || 'Image'} 
-                                              className="max-w-full max-h-64 sm:max-h-80 rounded-lg object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                                              onClick={() => window.open(message.metadata.url, '_blank')}
-                                            />
-                                          )}
-                                          {message.metadata.type === 'video' && (
-                                            <video 
-                                              src={message.metadata.url} 
-                                              controls
-                                              className="max-w-full max-h-64 sm:max-h-80 rounded-lg"
-                                              preload="metadata"
-                                            >
-                                              Your browser does not support the video tag.
-                                            </video>
-                                          )}
-                                          {message.metadata.type === 'file' && (
-                                            <a
-                                              href={message.metadata.url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="flex items-center gap-2 p-2.5 bg-white/20 dark:bg-white/10 rounded hover:bg-white/30 transition-colors"
-                                            >
-                                              <File className="w-5 h-5 flex-shrink-0" />
-                                              <div className="flex-1 min-w-0">
-                                                <div className="text-xs font-medium truncate">{message.metadata.fileName || 'File'}</div>
-                                                <div className="text-[10px] text-gray-500 dark:text-gray-400">Click to download</div>
-                                              </div>
-                                            </a>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* Message content */}
-                                      {message.content && (
-                                        <p className="text-sm sm:text-base whitespace-pre-wrap leading-relaxed break-words">
-                                          {message.content}
-                                        </p>
-                                      )}
-
-                                      {/* Timestamp - WhatsApp style (bottom right, small) */}
-                                      <div className="flex items-center justify-end gap-1 mt-1">
-                                        <span className={`text-[11px] leading-none ${
-                                          isCustomer 
-                                            ? 'text-gray-700 dark:text-gray-300' 
-                                            : 'text-gray-600 dark:text-gray-400'
+                                
+                                {/* KB Article - Standalone Card */}
+                                {isKBArticle ? (
+                                  <div className={`flex flex-col mb-3 ${isCustomer ? 'items-end' : 'items-start'}`}>
+                                    <div className="w-full sm:w-auto sm:max-w-md md:max-w-lg lg:max-w-xl">
+                                      <KBArticleCard
+                                        title={message.metadata.title}
+                                        excerpt={message.metadata.excerpt}
+                                        slug={message.metadata.slug}
+                                        articleId={message.metadata.articleId}
+                                        category={message.metadata.category}
+                                        article={message.metadata}
+                                        onClick={(article) => setViewingArticle(article)}
+                                      />
+                                    </div>
+                                    <div className={`flex ${isCustomer ? 'justify-end' : 'justify-start'} mt-1 px-2`}>
+                                      <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                        {formatMessageTime(message.createdAt)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  /* Regular Message Bubble */
+                                  <>
+                                    {/* Sender Name Label */}
+                                    {showSenderName && (
+                                      <div className={`mb-1 px-2 ${isCustomer ? 'pr-4 text-right' : 'pl-4 text-left'}`}>
+                                        <span className={`text-xs font-semibold ${
+                                          isAdmin 
+                                            ? 'text-violet-600 dark:text-violet-400' 
+                                            : isAgent 
+                                              ? 'text-blue-600 dark:text-blue-400'
+                                              : isCustomer
+                                                ? 'text-gray-700 dark:text-gray-300'
+                                                : 'text-gray-600 dark:text-gray-400'
                                         }`}>
-                                          {formatMessageTime(message.createdAt)}
+                                          {senderName}
                                         </span>
                                       </div>
-                                    </div>
-
-                                    {/* Reply button (on hover) - Only show on desktop */}
-                                    <button
-                                      onClick={() => handleReply(message)}
-                                      className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg"
-                                      title="Reply"
+                                    )}
+                                    <div
+                                      className={`flex ${isCustomer ? 'justify-end' : 'justify-start'} mb-0.5 group`}
                                     >
-                                      <Reply className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                                    </button>
-                                  </div>
-                                </div>
+                                      <div className={`flex items-end gap-1 max-w-[85%] sm:max-w-[75%] ${isCustomer ? 'flex-row-reverse' : 'flex-row'}`}>
+                                        {/* WhatsApp-style message bubble */}
+                                        <div
+                                          className={`relative px-2.5 py-1.5 sm:px-3 sm:py-2 ${
+                                            isCustomer
+                                              ? 'bg-[#DCF8C6] dark:bg-[#005C4B] text-gray-900 dark:text-white'
+                                              : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white shadow-[0_1px_0.5px_rgba(0,0,0,0.13)]'
+                                          }`}
+                                          style={{
+                                            borderRadius: isCustomer
+                                              ? isSameSender && prevMessage?.senderType === 'customer'
+                                                ? '7.5px 7.5px 1.5px 7.5px' // Connected to previous
+                                                : '7.5px 7.5px 1.5px 7.5px' // First in group with tail
+                                              : isSameSender && prevMessage?.senderType !== 'customer'
+                                                ? '7.5px 7.5px 7.5px 1.5px' // Connected to previous
+                                                : '7.5px 7.5px 7.5px 1.5px' // First in group with tail
+                                          }}
+                                        >
+                                          {/* Reply preview if message is a reply */}
+                                          {(() => {
+                                            // Handle replyTo - can be an object or an ID
+                                            const repliedToMessage = message.replyTo 
+                                              ? (typeof message.replyTo === 'object' 
+                                                  ? message.replyTo 
+                                                  : (ticketDetails?.messages?.find(m => m.id === message.replyTo) || null))
+                                              : null;
+                                            
+                                            return repliedToMessage ? (
+                                              <div 
+                                                className={`mb-2 p-2 rounded border-l-4 ${
+                                                  isCustomer
+                                                    ? 'bg-white/30 dark:bg-white/10 border-white/50'
+                                                    : 'bg-gray-100 dark:bg-slate-700 border-gray-300 dark:border-slate-600'
+                                                }`}
+                                              >
+                                                <div className="text-xs font-semibold opacity-80 mb-1">
+                                                  {repliedToMessage.senderType === 'customer' 
+                                                    ? 'You' 
+                                                    : (() => {
+                                                        const fullName = repliedToMessage.senderName || '';
+                                                        if (fullName) {
+                                                          const firstName = fullName.trim().split(' ')[0];
+                                                          return firstName || fullName;
+                                                        }
+                                                        return 'Support Agent';
+                                                      })()}
+                                                </div>
+                                                <div className="text-xs opacity-70 line-clamp-2">
+                                                  {repliedToMessage.content || 'Message'}
+                                                </div>
+                                              </div>
+                                            ) : null;
+                                          })()}
+
+                                          {/* Attachment Preview */}
+                                          {message.metadata && message.metadata.type && (
+                                            <div className="mb-2">
+                                              {message.metadata.type === 'image' && (
+                                                <img 
+                                                  src={message.metadata.url} 
+                                                  alt={message.metadata.fileName || 'Image'} 
+                                                  className="max-w-full max-h-64 sm:max-h-80 rounded-lg object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                                  onClick={() => window.open(message.metadata.url, '_blank')}
+                                                />
+                                              )}
+                                              {message.metadata.type === 'video' && (
+                                                <video 
+                                                  src={message.metadata.url} 
+                                                  controls
+                                                  className="max-w-full max-h-64 sm:max-h-80 rounded-lg"
+                                                  preload="metadata"
+                                                >
+                                                  Your browser does not support the video tag.
+                                                </video>
+                                              )}
+                                              {message.metadata.type === 'file' && (
+                                                <a
+                                                  href={message.metadata.url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="flex items-center gap-2 p-2.5 bg-white/20 dark:bg-white/10 rounded hover:bg-white/30 transition-colors"
+                                                >
+                                                  <File className="w-5 h-5 flex-shrink-0" />
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="text-xs font-medium truncate">{message.metadata.fileName || 'File'}</div>
+                                                    <div className="text-[10px] text-gray-500 dark:text-gray-400">Click to download</div>
+                                                  </div>
+                                                </a>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {/* Message content */}
+                                          {message.content && (
+                                            <p className="text-sm sm:text-base whitespace-pre-wrap leading-relaxed break-words">
+                                              {formatMessageContent(message.content)}
+                                            </p>
+                                          )}
+
+                                          {/* Timestamp - WhatsApp style (bottom right, small) */}
+                                          <div className="flex items-center justify-end gap-1 mt-1">
+                                            <span className={`text-[11px] leading-none ${
+                                              isCustomer 
+                                                ? 'text-gray-700 dark:text-gray-300' 
+                                                : 'text-gray-600 dark:text-gray-400'
+                                            }`}>
+                                              {formatMessageTime(message.createdAt)}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Reply button (on hover) - Only show on desktop */}
+                                        {!isKBArticle && (
+                                          <button
+                                            onClick={() => handleReply(message)}
+                                            className="hidden sm:flex opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg"
+                                            title="Reply"
+                                          >
+                                            <Reply className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             );
                           })
@@ -936,6 +1101,11 @@ export default function TicketsView({ userInfo, onBack }) {
                             </div>
                           </div>
                         )}
+                        
+                        {/* Feedback System Message - Show after all messages if feedback exists */}
+                        {ticketDetails.feedbacks && ticketDetails.feedbacks.length > 0 && (
+                          <FeedbackSystemMessage feedback={ticketDetails.feedbacks[0]} />
+                        )}
                         <div ref={messagesEndRef} />
                       </div>
 
@@ -946,7 +1116,16 @@ export default function TicketsView({ userInfo, onBack }) {
                             <div className="w-0.5 h-8 bg-violet-600 rounded-full"></div>
                             <div className="flex-1 min-w-0">
                               <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                                Replying to {replyingTo.senderType === 'customer' ? 'You' : (replyingTo.senderName || 'Support Agent')}
+                                Replying to {replyingTo.senderType === 'customer' 
+                                  ? 'You' 
+                                  : (() => {
+                                      const fullName = replyingTo.senderName || '';
+                                      if (fullName) {
+                                        const firstName = fullName.trim().split(' ')[0];
+                                        return firstName || fullName;
+                                      }
+                                      return 'Support Agent';
+                                    })()}
                               </div>
                               <div className="text-xs text-gray-600 dark:text-gray-400 truncate">
                                 {replyingTo.content || 'Message'}
@@ -1013,7 +1192,7 @@ export default function TicketsView({ userInfo, onBack }) {
                       )}
 
                       {/* Message Input - WhatsApp Style */}
-                      <div className="px-2 sm:px-4 py-2 sm:py-3 bg-[#F0F2F5] dark:bg-[#202C33] border-t border-gray-200 dark:border-slate-700 flex-shrink-0 safe-area-inset-bottom">
+                      <div className="px-2 sm:px-4 py-2 sm:py-3 bg-[#F0F2F5] dark:bg-[#202C33] border-t border-gray-200 dark:border-slate-700 flex-shrink-0 safe-area-inset-bottom relative overflow-visible">
                         <div className="flex gap-1.5 sm:gap-2 items-end">
                           {/* File Attachment Button */}
                           <button
@@ -1051,6 +1230,7 @@ export default function TicketsView({ userInfo, onBack }) {
                           {/* Text Input - WhatsApp Style */}
                           <div className="flex-1 relative">
                             <textarea
+                              ref={messageTextareaRef}
                               value={newMessage}
                               onChange={(e) => {
                                 setNewMessage(e.target.value);
@@ -1074,6 +1254,20 @@ export default function TicketsView({ userInfo, onBack }) {
                                 lineHeight: '1.4'
                               }}
                             />
+                            {/* Macro Autocomplete */}
+                            <MacroAutocomplete
+                              textareaRef={messageTextareaRef}
+                              value={newMessage}
+                              onChange={(e) => {
+                                setNewMessage(e.target.value);
+                                // Auto-resize
+                                if (messageTextareaRef.current) {
+                                  messageTextareaRef.current.style.height = 'auto';
+                                  messageTextareaRef.current.style.height = `${Math.min(messageTextareaRef.current.scrollHeight, 120)}px`;
+                                }
+                              }}
+                              isMounted={isMounted}
+                            />
                           </div>
 
                           {/* Send Button - WhatsApp Style */}
@@ -1090,10 +1284,26 @@ export default function TicketsView({ userInfo, onBack }) {
                           </button>
                         </div>
                         {(ticketDetails.status === 'closed' || ticketDetails.status === 'resolved') && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                            This ticket is {ticketDetails.status}. You cannot send messages.
-                          </p>
+                          <>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                              This ticket is {ticketDetails.status}. You cannot send messages.
+                            </p>
+                            {/* Show feedback component if ticket is closed/resolved and no feedback exists */}
+                            {(!ticketDetails.feedbacks || ticketDetails.feedbacks.length === 0) && (
+                              <TicketFeedback
+                                ticketId={ticketDetails.ticketNumber}
+                                customerEmail={userInfo?.email}
+                                onSubmitted={(feedback) => {
+                                  // Update ticketDetails to include the new feedback
+                                  setTicketDetails(prev => ({
+                                    ...prev,
+                                    feedbacks: [feedback]
+                                  }));
+                                }}
+                              />
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -1162,6 +1372,15 @@ export default function TicketsView({ userInfo, onBack }) {
         document.body
       )}
 
+      {/* Article Viewer Modal - Outside scroll container but inside main div */}
+      {isMounted && viewingArticle && (
+        <ArticleViewerModal
+          article={viewingArticle}
+          isOpen={!!viewingArticle}
+          onClose={() => setViewingArticle(null)}
+          isMounted={isMounted}
+        />
+      )}
     </>
   );
 }

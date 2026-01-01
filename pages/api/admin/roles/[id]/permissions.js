@@ -38,9 +38,7 @@ const AVAILABLE_PAGES = [
   { name: 'admin.roles', label: 'Role List', category: '02. Admin Setting' },
   { name: 'admin.roles.create', label: 'Create Role', category: '02. Admin Setting' },
   { name: 'admin.roles.edit', label: 'Edit Role', category: '02. Admin Setting' },
-  { name: 'admin.roles.delete', label: 'Delete Role', category: '02. Admin Setting' },
-  { name: 'admin.role-access', label: 'Role Access', category: '02. Admin Setting' },
-  { name: 'admin.role-access.modify', label: 'Modify Role Access', category: '02. Admin Setting' }
+  { name: 'admin.roles.delete', label: 'Delete Role', category: '02. Admin Setting' }
 ];
 
 export default async function handler(req, res) {

@@ -94,7 +94,7 @@ export default async function handler(req, res) {
       const { ticketId } = req.body;
 
       await prisma.conversation.delete({
-        where: { id: ticketId }
+        where: { ticketNumber: ticketId }
       });
 
       return res.status(200).json({ 

@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -48,7 +51,7 @@ export default async function handler(req, res) {
     });
 
     // Calculate performance metrics for each agent
-    const agentPerformance = agents.map(agent => {
+    const agentPerformance = await Promise.all(agents.map(async (agent) => {
       const tickets = agent.assignedConversations;
       const totalTickets = tickets.length;
       const resolvedTickets = tickets.filter(t => t.status === 'resolved' || t.status === 'closed');
@@ -78,7 +81,7 @@ export default async function handler(req, res) {
 
       const averageFRT = frtCount > 0 ? Math.round((totalFRT / frtCount) * 100) / 100 : 0;
 
-      // Calculate Average Resolution Time
+      // Calculate Average Resolution Time (Calendar Time)
       let totalResolutionTime = 0;
       let resolvedCount = 0;
 
@@ -97,6 +100,46 @@ export default async function handler(req, res) {
         ? Math.round((totalResolutionTime / resolvedCount) * 100) / 100 
         : 0;
 
+      // Calculate Active Handling Time using Worklog Aggregation
+      // Build worklog date filter matching the report's time range
+      const worklogDateFilter = {};
+      if (startDate || endDate) {
+        worklogDateFilter.startedAt = {};
+        if (startDate) {
+          worklogDateFilter.startedAt.gte = new Date(startDate);
+        }
+        if (endDate) {
+          worklogDateFilter.startedAt.lte = new Date(endDate);
+        }
+      }
+
+      // Aggregate worklogs for this agent in the date range
+      const worklogAggregate = await prisma.worklog.aggregate({
+        where: {
+          agentId: agent.id,
+          ...worklogDateFilter
+        },
+        _sum: {
+          durationSeconds: true
+        },
+        _count: {
+          id: true
+        }
+      });
+
+      // Calculate active time metrics from worklog aggregate
+      const totalActiveSeconds = worklogAggregate._sum.durationSeconds || 0;
+      const totalActiveHours = totalActiveSeconds / 3600;
+      const worklogCount = worklogAggregate._count.id || 0;
+      
+      // Average active time per resolved ticket (if any resolved tickets)
+      const averageActiveHours = resolvedCount > 0 
+        ? Math.round((totalActiveHours / resolvedCount) * 100) / 100 
+        : 0;
+      const averageActiveMinutes = resolvedCount > 0
+        ? Math.round((totalActiveSeconds / resolvedCount) / 60)
+        : 0;
+
       // Calculate Resolution Rate
       const resolutionRate = totalTickets > 0 
         ? Math.round((resolvedTickets.length / totalTickets) * 100) 
@@ -112,10 +155,15 @@ export default async function handler(req, res) {
         pendingTickets: pendingTickets.length,
         resolvedTickets: resolvedTickets.length,
         averageFRT,
-        averageResolutionTime,
+        averageResolutionTime, // Calendar Resolution Time (Resolved - Created)
+        totalActiveSeconds, // Total active seconds from worklogs
+        totalActiveHours, // Total active hours from worklogs
+        averageActiveHours, // Average Active Handling Time per resolved ticket (Sum of Worklogs / Resolved Count)
+        averageActiveMinutes, // Average Active Handling Time in minutes (for display)
+        worklogCount, // Number of worklog sessions
         resolutionRate
       };
-    });
+    }));
 
     // Sort by total tickets (descending)
     agentPerformance.sort((a, b) => b.totalTickets - a.totalTickets);
@@ -136,8 +184,6 @@ export default async function handler(req, res) {
       message: 'Error fetching agent performance',
       error: error.message 
     });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

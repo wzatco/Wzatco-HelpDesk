@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
-
-const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   const userId = getCurrentUserId(req);
@@ -14,6 +12,9 @@ export default async function handler(req, res) {
       if (!hasAccess) return;
     }
     try {
+      await ensurePrismaConnected();
+      
+      // Fetch roles with agent counts
       const roles = await prisma.role.findMany({
         orderBy: { createdAt: 'desc' },
         include: {
@@ -23,12 +24,29 @@ export default async function handler(req, res) {
         }
       });
 
-      res.status(200).json({ success: true, roles });
+      // Count total Admins (from Admin table)
+      const adminCount = await prisma.admin.count();
+
+      // Merge Admin count into "Admin" or "Administrator" role
+      const rolesWithAdminCount = roles.map(role => {
+        // Check if this role represents Admins (case-insensitive)
+        const roleTitle = role.title?.toLowerCase() || '';
+        if (roleTitle === 'admin' || roleTitle === 'administrator') {
+          return {
+            ...role,
+            _count: {
+              ...role._count,
+              agents: (role._count?.agents || 0) + adminCount
+            }
+          };
+        }
+        return role;
+      });
+
+      res.status(200).json({ success: true, roles: rolesWithAdminCount });
     } catch (error) {
       console.error('Error fetching roles:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else if (req.method === 'POST') {
     // Check permission to create roles
@@ -65,8 +83,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error creating role:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else {
     res.setHeader('Allow', ['GET', 'POST']);

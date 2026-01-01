@@ -1,7 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import { notifySLARisk } from '@/lib/utils/notifications';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 /**
  * Check SLA risk for a specific ticket
@@ -10,7 +13,7 @@ const prisma = new PrismaClient();
 export async function checkTicketSLARisk(ticketId) {
   try {
     const ticket = await prisma.conversation.findUnique({
-      where: { id: ticketId },
+      where: { ticketNumber: ticketId },
       include: {
         department: {
           select: {
@@ -79,7 +82,7 @@ export async function checkTicketSLARisk(ticketId) {
           where: {
             type: 'sla_risk',
             metadata: {
-              contains: `"ticketId":"${ticket.id}"`
+              contains: `"ticketId":"${ticket.ticketNumber}"`
             },
             createdAt: {
               gte: new Date(now.getTime() - 60 * 60 * 1000)
@@ -92,7 +95,7 @@ export async function checkTicketSLARisk(ticketId) {
 
         if (!recentNotification) {
           const notification = await notifySLARisk(prisma, {
-            ticketId: ticket.id,
+            ticketId: ticket.ticketNumber,
             ticketSubject: ticket.subject || 'No subject',
             slaType: 'first_response',
             timeRemaining,
@@ -115,7 +118,7 @@ export async function checkTicketSLARisk(ticketId) {
         where: {
           type: 'sla_risk',
           metadata: {
-            contains: `"ticketId":"${ticket.id}"`
+            contains: `"ticketId":"${ticket.ticketNumber}"`
           },
           createdAt: {
             gte: new Date(now.getTime() - 60 * 60 * 1000)
@@ -128,7 +131,7 @@ export async function checkTicketSLARisk(ticketId) {
 
       if (!recentNotification) {
         const notification = await notifySLARisk(prisma, {
-          ticketId: ticket.id,
+          ticketId: ticket.ticketNumber,
           ticketSubject: ticket.subject || 'No subject',
           slaType: 'resolution',
           timeRemaining,
@@ -171,8 +174,6 @@ export default async function handler(req, res) {
       message: 'Internal server error',
       error: error.message
     });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

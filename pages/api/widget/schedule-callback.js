@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { date, time, phoneNumber, email, name } = req.body;
+    const { date, time, phoneNumber, reason, email, name } = req.body;
 
     if (!date || !time || !phoneNumber || !email) {
       return res.status(400).json({
@@ -43,12 +43,52 @@ export default async function handler(req, res) {
           phone: phoneNumber,
         }
       });
+
+      // Trigger webhook for customer creation
+      try {
+        const { triggerWebhook } = await import('../../../lib/utils/webhooks');
+        await triggerWebhook('customer.created', {
+          customer: {
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            location: customer.location,
+            createdAt: customer.createdAt
+          }
+        });
+      } catch (webhookError) {
+        console.error('Error triggering customer.created webhook:', webhookError);
+        // Don't fail callback scheduling if webhook fails
+      }
     } else if (!customer.phone) {
       // Update phone if not set
-      await prisma.customer.update({
+      const oldCustomer = { ...customer };
+      customer = await prisma.customer.update({
         where: { id: customer.id },
         data: { phone: phoneNumber }
       });
+
+      // Trigger webhook for customer update
+      try {
+        const { triggerWebhook } = await import('../../../lib/utils/webhooks');
+        await triggerWebhook('customer.updated', {
+          customer: {
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            location: customer.location,
+            updatedAt: customer.updatedAt
+          },
+          changes: {
+            phone: oldCustomer.phone !== customer.phone
+          }
+        });
+      } catch (webhookError) {
+        console.error('Error triggering customer.updated webhook:', webhookError);
+        // Don't fail callback scheduling if webhook fails
+      }
     }
 
     // Convert time from 12-hour format (e.g., "09:00 AM") to 24-hour format
@@ -73,6 +113,7 @@ export default async function handler(req, res) {
         customerName: name || customer.name || 'Guest',
         customerEmail: email.toLowerCase(),
         phoneNumber: phoneNumber,
+        reason: reason && reason.trim() ? reason.trim() : null,
         scheduledTime: scheduledTime,
         status: 'pending'
       }
@@ -135,6 +176,12 @@ export default async function handler(req, res) {
               <div class="label">Scheduled Time</div>
               <div class="value">${formattedTime}</div>
             </div>
+            ${reason && reason.trim() ? `
+            <div class="info-row">
+              <div class="label">Reason for Callback</div>
+              <div class="value">${reason.trim()}</div>
+            </div>
+            ` : ''}
           </div>
           <div class="footer">
             <p>This is an automated notification from WZATCO Support System</p>
@@ -169,6 +216,7 @@ export default async function handler(req, res) {
           customerName,
           customerEmail: email,
           phoneNumber,
+          reason: reason && reason.trim() ? reason.trim() : null,
           scheduledTime: scheduledTime.toISOString()
         }),
         sendEmail: false // Already sent email above

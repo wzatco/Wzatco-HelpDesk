@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../../lib/prisma';
 import { updateTATMetrics, formatTAT } from '../../../../lib/utils/tat';
 import { 
   notifyTicketAssignment, 
@@ -13,8 +13,6 @@ import { triggerWebhook } from '@/lib/utils/webhooks';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
-const prisma = new PrismaClient();
-
 export default async function handler(req, res) {
   const { id } = req.query;
   const userId = getCurrentUserId(req);
@@ -26,9 +24,9 @@ export default async function handler(req, res) {
       if (!hasAccess) return;
     }
     try {
-      // Fetch ticket with related data
+      // Fetch ticket by ticketNumber (primary key)
       const ticket = await prisma.conversation.findUnique({
-        where: { id },
+        where: { ticketNumber: id },
         include: {
           messages: {
             orderBy: { createdAt: 'asc' },
@@ -55,6 +53,12 @@ export default async function handler(req, res) {
               id: true,
               name: true
             }
+          },
+          feedbacks: {
+            orderBy: {
+              submittedAt: 'desc'
+            },
+            take: 1 // Only get the most recent feedback
           }
         }
       });
@@ -98,12 +102,12 @@ export default async function handler(req, res) {
       } else if (ticket.customerName && ticket.customerName !== 'Unknown Customer') {
         // Last resort: if we have customerName but no customerId, try to find by name/email
         // This shouldn't normally happen, but handle it gracefully
-        console.warn(`Ticket ${ticket.id} has customerName but no customerId`);
+        console.warn(`Ticket ${ticket.ticketNumber} has customerName but no customerId`);
       }
 
       // Transform ticket for frontend
       const transformedTicket = {
-        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
         subject: ticket.subject || 'No subject',
         description: ticket.description || null,
         status: ticket.status,
@@ -128,6 +132,20 @@ export default async function handler(req, res) {
         customer: customerData,
         customerId: ticket.customerId, // Include customerId for fallback
         customerName: ticket.customerName, // Include customerName for fallback
+        // Ticket creation form fields
+        customerEmail: ticket.customerEmail || null,
+        customerPhone: ticket.customerPhone || null,
+        customerAltPhone: ticket.customerAltPhone || null,
+        customerAddress: ticket.customerAddress || null,
+        orderNumber: ticket.orderNumber || null,
+        purchasedFrom: ticket.purchasedFrom || null,
+        ticketBody: ticket.ticketBody || null,
+        invoiceUrl: ticket.invoiceUrl || null,
+        additionalDocuments: ticket.additionalDocuments ? (typeof ticket.additionalDocuments === 'string' ? JSON.parse(ticket.additionalDocuments) : ticket.additionalDocuments) : null,
+        projectorImages: ticket.projectorImages ? (typeof ticket.projectorImages === 'string' ? JSON.parse(ticket.projectorImages) : ticket.projectorImages) : null,
+        issueVideoLink: ticket.issueVideoLink || null,
+        issueType: ticket.issueType || null,
+        createdVia: ticket.createdVia || null,
         department: ticket.department ? {
           id: ticket.department.id,
           name: ticket.department.name
@@ -143,7 +161,14 @@ export default async function handler(req, res) {
         firstResponseTimeSeconds: ticket.firstResponseTimeSeconds,
         firstResponseTimeFormatted: ticket.firstResponseTimeSeconds ? formatTAT(ticket.firstResponseTimeSeconds) : null,
         resolutionTimeSeconds: ticket.resolutionTimeSeconds,
-        resolutionTimeFormatted: ticket.resolutionTimeSeconds ? formatTAT(ticket.resolutionTimeSeconds) : null
+        resolutionTimeFormatted: ticket.resolutionTimeSeconds ? formatTAT(ticket.resolutionTimeSeconds) : null,
+        feedbacks: ticket.feedbacks && ticket.feedbacks.length > 0 ? ticket.feedbacks.map(fb => ({
+          id: fb.id,
+          rating: fb.rating,
+          comment: fb.comment,
+          customerName: fb.customerName,
+          submittedAt: fb.submittedAt
+        })) : []
       };
 
       // Transform messages with sender information
@@ -230,11 +255,14 @@ export default async function handler(req, res) {
     }
     
     try {
-      const { status, priority, assigneeId, subject, category, productModel, productId, accessoryId, priorityReason, departmentId } = req.body;
+      const { 
+        status, priority, assigneeId, subject, category, productModel, productId, accessoryId, priorityReason, departmentId,
+        customerEmail, customerPhone, customerAltPhone, customerAddress, orderNumber, purchasedFrom, ticketBody, invoiceUrl, issueVideoLink, issueType
+      } = req.body;
 
-      // Fetch current ticket to compare changes
+      // Fetch current ticket by ticketNumber (primary key)
       const currentTicket = await prisma.conversation.findUnique({
-        where: { id },
+        where: { ticketNumber: id },
         include: { 
           assignee: true,
           customer: true,
@@ -301,7 +329,7 @@ export default async function handler(req, res) {
         
         updateData.status = status;
         activities.push({
-          conversationId: id,
+          conversationId: currentTicket.ticketNumber,
           activityType: 'status_changed',
           oldValue: currentTicket.status,
           newValue: status,
@@ -312,17 +340,60 @@ export default async function handler(req, res) {
         // Update TAT metrics when status changes (especially for resolution)
         if (status === 'resolved' || status === 'closed') {
           try {
-            await updateTATMetrics(prisma, id);
+            await updateTATMetrics(prisma, currentTicket.ticketNumber);
           } catch (tatError) {
             console.error('Error updating TAT metrics on status change:', tatError);
           }
+        }
+
+        // Handle SLA timer pause/resume/stop based on status change
+        try {
+          const { SLAService } = await import('../../../../lib/sla-service');
+          
+          // Get the policy to check pause conditions
+          const activeTimers = await prisma.sLATimer.findMany({
+            where: {
+              conversationId: currentTicket.ticketNumber,
+              status: { in: ['running', 'paused'] }
+            },
+            include: {
+              policy: true
+            },
+            take: 1
+          });
+
+          if (activeTimers.length > 0 && activeTimers[0].policy) {
+            const policy = activeTimers[0].policy;
+            
+            // Stop SLA timers if ticket is resolved or closed
+            if (status === 'resolved' || status === 'closed') {
+              await SLAService.stopTimer(currentTicket.ticketNumber);
+            }
+            // Pause SLA if status is waiting or on hold (based on policy)
+            else if ((policy.pauseOnWaiting && status === 'waiting') || 
+                     (policy.pauseOnHold && status === 'on_hold')) {
+              await SLAService.pauseTimer(currentTicket.ticketNumber, `Status changed to ${status}`);
+            }
+            // Resume SLA if status changed back to active from paused state
+            else if ((currentTicket.status === 'waiting' || currentTicket.status === 'on_hold') && 
+                     (status === 'open' || status === 'pending')) {
+              await SLAService.resumeTimer(currentTicket.ticketNumber);
+            }
+            // Check pause conditions for other status changes
+            else {
+              await SLAService.checkPauseConditions(currentTicket.ticketNumber, status, policy);
+            }
+          }
+        } catch (slaError) {
+          // Log error but don't fail ticket update if SLA handling fails
+          console.error('Error handling SLA on status change:', slaError);
         }
         
         // Create notification for status change
         try {
           await notifyStatusChange(prisma, {
-            ticketId: id,
-            ticketSubject: currentTicket.subject || id,
+            ticketId: currentTicket.ticketNumber,
+            ticketSubject: currentTicket.subject || currentTicket.ticketNumber,
             oldStatus: currentTicket.status,
             newStatus: status,
             changedBy: adminProfile?.name || 'Admin',
@@ -337,11 +408,11 @@ export default async function handler(req, res) {
         if ((status === 'resolved' || status === 'closed') && currentTicket.customer?.email) {
           try {
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-            const ticketLink = `${baseUrl}/ticket/${id}`;
-            const feedbackLink = `${baseUrl}/ticket/${id}/feedback`;
+            const ticketLink = `${baseUrl}/admin/tickets/${currentTicket.ticketNumber}`;
+            const feedbackLink = `${baseUrl}/ticket/${currentTicket.ticketNumber}/feedback`;
             
             await notifyTicketResolvedCustomer(prisma, {
-              ticketId: id,
+              ticketId: currentTicket.ticketNumber,
               ticketSubject: currentTicket.subject || 'No subject',
               customerEmail: currentTicket.customer.email,
               customerName: currentTicket.customer.name || 'Customer',
@@ -360,7 +431,7 @@ export default async function handler(req, res) {
         // Check SLA risk after status change (if ticket is still open)
         if (status !== 'resolved' && status !== 'closed') {
           try {
-            await checkTicketSLARisk(id);
+            await checkTicketSLARisk(currentTicket.ticketNumber);
           } catch (slaError) {
             console.error('Error checking SLA risk:', slaError);
             // Don't fail the request if SLA check fails
@@ -371,7 +442,7 @@ export default async function handler(req, res) {
       if (priority !== undefined && priority !== currentTicket.priority) {
         updateData.priority = priority;
         activities.push({
-          conversationId: id,
+          conversationId: currentTicket.ticketNumber,
           activityType: 'priority_changed',
           oldValue: currentTicket.priority || 'low',
           newValue: priority,
@@ -384,10 +455,10 @@ export default async function handler(req, res) {
         if (currentTicket.customer?.email) {
           try {
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-            const ticketLink = `${baseUrl}/ticket/${id}`;
+            const ticketLink = `${baseUrl}/admin/tickets/${currentTicket.ticketNumber || currentTicket.id}`;
             
             await notifyPriorityChangeCustomer(prisma, {
-              ticketId: id,
+              ticketId: currentTicket.ticketNumber,
               ticketSubject: currentTicket.subject || 'No subject',
               customerEmail: currentTicket.customer.email,
               customerName: currentTicket.customer.name || 'Customer',
@@ -411,10 +482,19 @@ export default async function handler(req, res) {
           updateData.assigneeId = assigneeId === null ? null : assigneeId;
           
           if (!wasAssigned && willBeAssigned) {
-            // Fetch agent name for assignment
-            const agent = await prisma.agent.findUnique({ where: { id: assigneeId } }).catch(() => null);
+            // Fetch agent info for assignment (including departmentId for auto-routing)
+            const agent = await prisma.agent.findUnique({ 
+              where: { id: assigneeId },
+              select: { id: true, name: true, email: true, departmentId: true }
+            }).catch(() => null);
+            
+            // Auto-update departmentId to match agent's department
+            if (agent && agent.departmentId) {
+              updateData.departmentId = agent.departmentId;
+            }
+            
             activities.push({
-              conversationId: id,
+              conversationId: currentTicket.ticketNumber,
               activityType: 'assigned',
               oldValue: null,
               newValue: agent?.name || 'Agent',
@@ -425,8 +505,8 @@ export default async function handler(req, res) {
             // Create notification for agent assignment
             try {
               await notifyTicketAssignment(prisma, {
-                ticketId: id,
-                ticketSubject: currentTicket.subject || id,
+                ticketId: currentTicket.ticketNumber,
+                ticketSubject: currentTicket.subject || currentTicket.ticketNumber,
                 agentId: assigneeId,
                 agentName: agent?.name || 'Agent',
                 assignedBy: adminProfile?.name || 'Admin'
@@ -436,14 +516,43 @@ export default async function handler(req, res) {
               // Don't fail the request if notification fails
             }
 
+            // Emit Socket.IO event for real-time assignment notification
+            try {
+              const { initialize } = await import('../../../../lib/chat-service');
+              const chatService = initialize(); // Get singleton instance
+              
+              if (chatService) {
+                chatService.emitTicketAssignment({
+                  ticketId: currentTicket.ticketNumber,
+                  assigneeId: assigneeId,
+                  assigneeName: agent?.name || 'Agent',
+                  assignedBy: adminProfile?.name || 'Admin',
+                  ticket: {
+                    ticketNumber: currentTicket.ticketNumber,
+                    id: currentTicket.ticketNumber,
+                    subject: currentTicket.subject,
+                    priority: currentTicket.priority,
+                    customer: currentTicket.customer ? {
+                      name: currentTicket.customer.name,
+                      email: currentTicket.customer.email
+                    } : null,
+                    customerName: currentTicket.customer?.name || currentTicket.customerName
+                  }
+                });
+              }
+            } catch (socketError) {
+              console.error('Error emitting ticket:assigned socket event:', socketError);
+              // Don't fail the request if socket emission fails
+            }
+
             // Send email to customer when ticket is assigned
             if (currentTicket.customer?.email && agent) {
               try {
                 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-                const ticketLink = `${baseUrl}/ticket/${id}`;
+                const ticketLink = `${baseUrl}/admin/tickets/${currentTicket.ticketNumber || currentTicket.id}`;
                 
                 await notifyTicketAssignedCustomer(prisma, {
-                  ticketId: id,
+                  ticketId: currentTicket.ticketNumber,
                   ticketSubject: currentTicket.subject || 'No subject',
                   customerEmail: currentTicket.customer.email,
                   customerName: currentTicket.customer.name || 'Customer',
@@ -459,7 +568,7 @@ export default async function handler(req, res) {
             }
           } else if (wasAssigned && !willBeAssigned) {
             activities.push({
-              conversationId: id,
+              conversationId: currentTicket.ticketNumber,
               activityType: 'unassigned',
               oldValue: currentTicket.assignee?.name || 'Agent',
               newValue: null,
@@ -468,15 +577,60 @@ export default async function handler(req, res) {
             });
           } else if (wasAssigned && willBeAssigned) {
             // Reassignment
-            const agent = await prisma.agent.findUnique({ where: { id: assigneeId } }).catch(() => null);
+            console.log('🔄 Reassignment detected - emitting socket event');
+            const agent = await prisma.agent.findUnique({ 
+              where: { id: assigneeId },
+              select: { id: true, name: true, email: true, departmentId: true }
+            }).catch(() => null);
+            
+            // Auto-update departmentId to match agent's department
+            if (agent && agent.departmentId) {
+              updateData.departmentId = agent.departmentId;
+            }
+            
             activities.push({
-              conversationId: id,
+              conversationId: currentTicket.ticketNumber,
               activityType: 'assigned',
               oldValue: currentTicket.assignee?.name || 'Agent',
               newValue: agent?.name || 'Agent',
               performedBy: 'admin',
               performedByName: adminProfile?.name || 'Admin'
             });
+
+            // Emit Socket.IO event for reassignment notification
+            try {
+              console.log('🎯 Attempting to import chat-service for reassignment socket emission');
+              const { initialize } = await import('../../../../lib/chat-service');
+              const chatService = initialize(); // Get singleton instance
+              console.log('🎯 ChatService initialized:', !!chatService);
+              
+              if (chatService) {
+                console.log('🎯 Calling emitTicketAssignment for reassignment');
+                chatService.emitTicketAssignment({
+                  ticketId: currentTicket.ticketNumber,
+                  assigneeId: assigneeId,
+                  assigneeName: agent?.name || 'Agent',
+                  assignedBy: adminProfile?.name || 'Admin',
+                  ticket: {
+                    ticketNumber: currentTicket.ticketNumber,
+                    id: currentTicket.ticketNumber,
+                    subject: currentTicket.subject,
+                    priority: currentTicket.priority,
+                    customer: currentTicket.customer ? {
+                      name: currentTicket.customer.name,
+                      email: currentTicket.customer.email
+                    } : null,
+                    customerName: currentTicket.customer?.name || currentTicket.customerName
+                  }
+                });
+                console.log('✅ Reassignment socket event emission completed');
+              } else {
+                console.warn('⚠️ ChatService is null/undefined for reassignment');
+              }
+            } catch (socketError) {
+              console.error('❌ Error emitting ticket:assigned socket event for reassignment:', socketError);
+              // Don't fail the request if socket emission fails
+            }
           }
         }
       }
@@ -484,7 +638,7 @@ export default async function handler(req, res) {
       if (subject !== undefined && subject !== currentTicket.subject) {
         updateData.subject = subject;
         activities.push({
-          conversationId: id,
+          conversationId: currentTicket.ticketNumber,
           activityType: 'subject_updated',
           oldValue: currentTicket.subject || '',
           newValue: subject,
@@ -496,7 +650,7 @@ export default async function handler(req, res) {
       if (category !== undefined && category !== currentTicket.category) {
         updateData.category = category;
         activities.push({
-          conversationId: id,
+          conversationId: currentTicket.ticketNumber,
           activityType: 'category_updated',
           oldValue: currentTicket.category || 'WZATCO',
           newValue: category,
@@ -508,7 +662,7 @@ export default async function handler(req, res) {
       if (productModel !== undefined && productModel !== currentTicket.productModel) {
         updateData.productModel = productModel;
         activities.push({
-          conversationId: id,
+          conversationId: currentTicket.ticketNumber,
           activityType: 'product_updated',
           oldValue: currentTicket.productModel || '',
           newValue: productModel,
@@ -518,17 +672,48 @@ export default async function handler(req, res) {
       }
 
       if (productId !== undefined && productId !== currentTicket.productId) {
-        updateData.productId = productId === '' ? null : productId;
-        const oldProduct = currentTicket.productId ? await prisma.product.findUnique({ where: { id: currentTicket.productId } }).catch(() => null) : null;
-        const newProduct = productId ? await prisma.product.findUnique({ where: { id: productId } }).catch(() => null) : null;
-        activities.push({
-          conversationId: id,
-          activityType: 'product_updated',
-          oldValue: oldProduct?.name || currentTicket.productModel || '',
-          newValue: newProduct?.name || '',
-          performedBy: 'admin',
-          performedByName: adminProfile?.name || 'Admin'
-        });
+        // If a valid productId is selected, clear productModel and set productId
+        if (productId && productId.trim() !== '') {
+          // Validate productId exists
+          const product = await prisma.product.findUnique({ where: { id: productId.trim() } }).catch(() => null);
+          if (product) {
+            updateData.productId = productId.trim();
+            updateData.productModel = null; // Clear custom product name when valid product is selected
+            const oldProduct = currentTicket.productId ? await prisma.product.findUnique({ where: { id: currentTicket.productId } }).catch(() => null) : null;
+            activities.push({
+              conversationId: currentTicket.ticketNumber,
+              activityType: 'product_updated',
+              oldValue: oldProduct?.name || currentTicket.productModel || '',
+              newValue: product.name,
+              performedBy: 'admin',
+              performedByName: adminProfile?.name || 'Admin'
+            });
+          } else {
+            // Invalid productId - treat as custom product name
+            updateData.productId = null;
+            updateData.productModel = productId.trim();
+            activities.push({
+              conversationId: currentTicket.ticketNumber,
+              activityType: 'product_updated',
+              oldValue: currentTicket.product?.name || currentTicket.productModel || '',
+              newValue: productId.trim(),
+              performedBy: 'admin',
+              performedByName: adminProfile?.name || 'Admin'
+            });
+          }
+        } else {
+          // Empty productId - clear both
+          updateData.productId = null;
+          updateData.productModel = null;
+          activities.push({
+            conversationId: currentTicket.ticketNumber,
+            activityType: 'product_updated',
+            oldValue: currentTicket.product?.name || currentTicket.productModel || '',
+            newValue: '',
+            performedBy: 'admin',
+            performedByName: adminProfile?.name || 'Admin'
+          });
+        }
       }
 
       if (accessoryId !== undefined && accessoryId !== currentTicket.accessoryId) {
@@ -536,7 +721,7 @@ export default async function handler(req, res) {
         const oldAccessory = currentTicket.accessoryId ? await prisma.accessory.findUnique({ where: { id: currentTicket.accessoryId } }).catch(() => null) : null;
         const newAccessory = accessoryId ? await prisma.accessory.findUnique({ where: { id: accessoryId } }).catch(() => null) : null;
         activities.push({
-          conversationId: id,
+          conversationId: currentTicket.ticketNumber,
           activityType: 'accessory_updated',
           oldValue: oldAccessory?.name || '',
           newValue: newAccessory?.name || '',
@@ -563,7 +748,7 @@ export default async function handler(req, res) {
         }
         
         activities.push({
-          conversationId: id,
+          conversationId: currentTicket.ticketNumber,
           activityType: 'department_routed',
           oldValue: oldDepartmentName,
           newValue: newDepartmentName,
@@ -572,9 +757,84 @@ export default async function handler(req, res) {
         });
       }
 
-      // Update ticket
+      // Handle ticket creation details fields
+      const creationDetailsFields = {
+        customerEmail,
+        customerPhone,
+        customerAltPhone,
+        customerAddress,
+        orderNumber,
+        purchasedFrom,
+        ticketBody,
+        invoiceUrl,
+        issueVideoLink,
+        issueType
+      };
+
+      let creationDetailsChanged = false;
+      for (const [field, value] of Object.entries(creationDetailsFields)) {
+        if (value !== undefined) {
+          const currentValue = currentTicket[field] || '';
+          const newValue = value || '';
+          if (currentValue !== newValue) {
+            updateData[field] = newValue === '' ? null : newValue;
+            creationDetailsChanged = true;
+          }
+        }
+      }
+
+      if (creationDetailsChanged) {
+        activities.push({
+          conversationId: currentTicket.ticketNumber,
+          activityType: 'creation_details_updated',
+          oldValue: 'Original creation details',
+          newValue: 'Updated by admin',
+          performedBy: 'admin',
+          performedByName: adminProfile?.name || 'Admin'
+        });
+      }
+
+      // Update ticket by ticketNumber (primary key)
+      // Auto-stop active worklogs when ticket is resolved or closed
+      if (updateData.status === 'resolved' || updateData.status === 'closed') {
+        try {
+          // Find all active worklogs for this ticket
+          const activeWorklogs = await prisma.worklog.findMany({
+            where: {
+              ticketNumber: currentTicket.ticketNumber,
+              endedAt: null // Active sessions
+            }
+          });
+
+          // Stop all active worklogs
+          const stopReason = updateData.status === 'resolved' ? 'Ticket Resolved' : 'Ticket Closed';
+          const endTime = new Date();
+
+          for (const worklog of activeWorklogs) {
+            const durationSeconds = Math.floor((endTime - new Date(worklog.startedAt)) / 1000);
+            
+            await prisma.worklog.update({
+              where: { id: worklog.id },
+              data: {
+                endedAt: endTime,
+                durationSeconds,
+                stopReason,
+                isSystemAuto: true
+              }
+            });
+          }
+
+          if (activeWorklogs.length > 0) {
+            console.log(`Auto-stopped ${activeWorklogs.length} worklog(s) for ticket ${currentTicket.ticketNumber} (${updateData.status})`);
+          }
+        } catch (worklogError) {
+          console.error('Error auto-stopping worklogs:', worklogError);
+          // Don't fail the request if worklog stopping fails
+        }
+      }
+
       const updatedTicket = await prisma.conversation.update({
-        where: { id },
+        where: { ticketNumber: currentTicket.ticketNumber },
         data: updateData,
         include: {
           assignee: true,
@@ -599,6 +859,20 @@ export default async function handler(req, res) {
           }
         }
       });
+
+      // Run automation for ticket update
+      try {
+        const { runAutomation } = await import('../../../../lib/automation/engine');
+        await runAutomation(updatedTicket, 'TICKET_UPDATED');
+        
+        // Also trigger automation for assignment change if assignee changed
+        if (assigneeId !== undefined && assigneeId !== currentTicket.assigneeId) {
+          await runAutomation(updatedTicket, 'TICKET_ASSIGNED');
+        }
+      } catch (automationError) {
+        // Log error but don't fail ticket update if automation fails
+        console.error('Error running automation:', automationError);
+      }
 
       // Create activity records (with error handling for when model doesn't exist yet)
       console.log(`Activities to create: ${activities.length}`, activities);
@@ -625,18 +899,55 @@ export default async function handler(req, res) {
       // Check SLA risk after any update (if ticket is still open)
       if (updatedTicket.status !== 'resolved' && updatedTicket.status !== 'closed') {
         try {
-          await checkTicketSLARisk(id);
+          await checkTicketSLARisk(updatedTicket.ticketNumber);
         } catch (slaError) {
           console.error('Error checking SLA risk after update:', slaError);
           // Don't fail the request if SLA check fails
         }
       }
 
+      // Emit Socket.IO events for real-time updates (Admin-to-Agent uplink)
+      try {
+        const io = req.socket?.server?.io || global.io;
+        
+        if (io) {
+          // Always emit general update event
+          io.emit('ticket:updated', {
+            ticketNumber: updatedTicket.ticketNumber,
+            updates: updateData
+          });
+
+          // Emit specific status change event if status was updated
+          if (status !== undefined && status !== currentTicket.status) {
+            io.emit('ticket:status:changed', {
+              ticketNumber: updatedTicket.ticketNumber,
+              oldStatus: currentTicket.status,
+              newStatus: updatedTicket.status
+            });
+          }
+
+          // Emit specific priority change event if priority was updated
+          if (priority !== undefined && priority !== currentTicket.priority) {
+            io.emit('ticket:priority:changed', {
+              ticketNumber: updatedTicket.ticketNumber,
+              oldPriority: currentTicket.priority,
+              newPriority: updatedTicket.priority
+            });
+          }
+
+          // Note: ticket:assigned is already handled via chatService.emitTicketAssignment above
+          // which emits to the specific agent's room. We don't need to duplicate it here.
+        }
+      } catch (socketError) {
+        console.error('Error emitting socket events for ticket update:', socketError);
+        // Don't fail the request if socket emission fails
+      }
+
       // Trigger webhooks for ticket updates
       try {
         const webhookPayload = {
           ticket: {
-            id: updatedTicket.id,
+            ticketNumber: updatedTicket.ticketNumber,
             subject: updatedTicket.subject,
             status: updatedTicket.status,
             priority: updatedTicket.priority,
@@ -684,7 +995,7 @@ export default async function handler(req, res) {
       res.status(200).json({
         message: 'Ticket updated successfully',
         ticket: {
-          id: updatedTicket.id,
+          ticketNumber: updatedTicket.ticketNumber,
           status: updatedTicket.status,
           priority: updatedTicket.priority,
           subject: updatedTicket.subject,
@@ -705,6 +1016,5 @@ export default async function handler(req, res) {
   } else {
     res.status(405).json({ message: 'Method not allowed' });
   }
-
-  await prisma.$disconnect();
+  // NOTE: Do NOT disconnect Prisma here - it's a singleton shared across all requests
 }

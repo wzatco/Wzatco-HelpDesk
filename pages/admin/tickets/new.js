@@ -3,6 +3,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import AdminLayout from '../../../components/admin/universal/AdminLayout';
 import { User, Mail, Phone, MapPin, FileText, Package, Tag, AlertCircle, Upload, X, Search as SearchIcon, CheckCircle, XCircle } from 'lucide-react';
+import StyledSelect from '../../../components/ui/StyledSelect';
 
 import { withAuth } from '../../../lib/withAuth';
 export default function NewTicketPage() {
@@ -24,6 +25,7 @@ export default function NewTicketPage() {
   const [products, setProducts] = useState([]);
   const [accessories, setAccessories] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [issueCategories, setIssueCategories] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -45,7 +47,12 @@ export default function NewTicketPage() {
   const [ticketSettings, setTicketSettings] = useState({
     hidePriorityCustomer: false
   });
-  
+  const [captchaSettings, setCaptchaSettings] = useState({
+    enabledPlacements: {
+      customerTicket: false
+    }
+  });
+
   const fileInputRef = useRef(null);
   const invoiceInputRef = useRef(null);
   const customerSearchTimeoutRef = useRef(null);
@@ -55,14 +62,16 @@ export default function NewTicketPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const [fileUploadRes, ticketRes] = await Promise.all([
+        const [fileUploadRes, ticketRes, captchaRes] = await Promise.all([
           fetch('/api/admin/settings/file-upload'),
-          fetch('/api/admin/settings/ticket')
+          fetch('/api/admin/settings/ticket'),
+          fetch('/api/admin/settings/captcha')
         ]);
-        
+
         const fileUploadData = await fileUploadRes.json();
         const ticketData = await ticketRes.json();
-        
+        const captchaData = await captchaRes.json();
+
         if (fileUploadData.success) {
           setFileUploadSettings({
             maxUploadSize: parseInt(fileUploadData.settings.maxUploadSize || '10', 10),
@@ -70,17 +79,21 @@ export default function NewTicketPage() {
             ticketFileUpload: fileUploadData.settings.ticketFileUpload !== false
           });
         }
-        
+
         if (ticketData.success) {
           setTicketSettings({
             hidePriorityCustomer: ticketData.settings.hidePriorityCustomer || false
           });
         }
+
+        if (captchaData.success) {
+          setCaptchaSettings(captchaData.settings);
+        }
       } catch (error) {
         console.error('Error fetching settings:', error);
       }
     };
-    
+
     fetchSettings();
   }, []);
 
@@ -113,8 +126,15 @@ export default function NewTicketPage() {
     fetchProducts();
     fetchAccessories();
     fetchTemplates();
-    fetchCaptcha();
+    fetchIssueCategories();
   }, []);
+
+  // Fetch captcha only if enabled
+  useEffect(() => {
+    if (captchaSettings.enabledPlacements?.customerTicket) {
+      fetchCaptcha();
+    }
+  }, [captchaSettings.enabledPlacements?.customerTicket]);
 
   const fetchTemplates = async () => {
     try {
@@ -145,6 +165,18 @@ export default function NewTicketPage() {
     }
   };
 
+  const fetchIssueCategories = async () => {
+    try {
+      const res = await fetch('/api/admin/issue-categories?activeOnly=true');
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIssueCategories(data.categories || []);
+      }
+    } catch (error) {
+      console.error('Error fetching issue categories:', error);
+    }
+  };
+
   const refreshCaptcha = () => {
     fetchCaptcha();
     setCaptchaInput('');
@@ -152,7 +184,7 @@ export default function NewTicketPage() {
   };
 
   // Filter accessories based on selected product
-  const filteredAccessories = formData.productId 
+  const filteredAccessories = formData.productId
     ? accessories.filter(acc => acc.productId === formData.productId)
     : [];
 
@@ -167,12 +199,14 @@ export default function NewTicketPage() {
 
   // Handle template selection
   const handleTemplateSelect = async (templateId) => {
-    if (!templateId) {
+    // Handle both event object and direct value
+    const id = typeof templateId === 'string' ? templateId : (templateId?.target?.value || '');
+    if (!id) {
       setSelectedTemplateId('');
       return;
     }
 
-    const template = templates.find(t => t.id === templateId);
+    const template = templates.find(t => t.id === id);
     if (!template) return;
 
     // Populate form with template data
@@ -186,11 +220,11 @@ export default function NewTicketPage() {
       departmentId: template.departmentId || prev.departmentId
     }));
 
-    setSelectedTemplateId(templateId);
+    setSelectedTemplateId(id);
 
     // Increment usage count
     try {
-      await fetch(`/api/admin/ticket-templates/${templateId}/use`, {
+      await fetch(`/api/admin/ticket-templates/${id}/use`, {
         method: 'POST'
       });
     } catch (error) {
@@ -219,9 +253,9 @@ export default function NewTicketPage() {
           setCustomerResults([]);
           return;
         }
-        
+
         const res = await fetch(`/api/admin/customers/search?q=${encodeURIComponent(searchTerm)}`);
-        
+
         // Check if response is JSON
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
@@ -229,7 +263,7 @@ export default function NewTicketPage() {
           setCustomerResults([]);
           return;
         }
-        
+
         const data = await res.json();
         if (res.ok) {
           setCustomerResults(data.customers || []);
@@ -280,14 +314,14 @@ export default function NewTicketPage() {
     const files = Array.from(e.target.files || []);
     const maxSizeBytes = fileUploadSettings.maxUploadSize * 1024 * 1024;
     const allowedTypes = fileUploadSettings.allowedFileTypes;
-    
+
     files.forEach(file => {
       // Check file size
       if (file.size > maxSizeBytes) {
         setStatus({ type: 'error', message: `File ${file.name} is too large. Max size is ${fileUploadSettings.maxUploadSize}MB.` });
         return;
       }
-      
+
       // Check file type if allowed types are configured
       if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
         setStatus({ type: 'error', message: `File ${file.name} type (${file.type}) is not allowed.` });
@@ -312,15 +346,15 @@ export default function NewTicketPage() {
   const handleInvoiceChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     const maxSizeBytes = fileUploadSettings.maxUploadSize * 1024 * 1024;
     const allowedTypes = fileUploadSettings.allowedFileTypes;
-    
+
     if (file.size > maxSizeBytes) {
       setStatus({ type: 'error', message: `Invoice file is too large. Max size is ${fileUploadSettings.maxUploadSize}MB.` });
       return;
     }
-    
+
     if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
       setStatus({ type: 'error', message: `Invoice file type (${file.type}) is not allowed.` });
       return;
@@ -383,25 +417,27 @@ export default function NewTicketPage() {
       return;
     }
 
-    // Validate captcha - must be present and correct
-    if (!captcha || !captcha.trim()) {
-      setStatus({ type: 'error', message: 'Captcha not loaded. Please refresh the page.' });
-      setSubmitting(false);
-      return;
-    }
+    // Validate captcha only if enabled
+    if (captchaSettings.enabledPlacements?.customerTicket) {
+      if (!captcha || !captcha.trim()) {
+        setStatus({ type: 'error', message: 'Captcha not loaded. Please refresh the page.' });
+        setSubmitting(false);
+        return;
+      }
 
-    if (!captchaInput || !captchaInput.trim()) {
-      setCaptchaError('Please enter the captcha code');
-      setSubmitting(false);
-      return;
-    }
+      if (!captchaInput || !captchaInput.trim()) {
+        setCaptchaError('Please enter the captcha code');
+        setSubmitting(false);
+        return;
+      }
 
-    if (captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
-      setCaptchaError('Invalid captcha code. Please try again.');
-      setCaptchaInput('');
-      refreshCaptcha();
-      setSubmitting(false);
-      return;
+      if (captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
+        setCaptchaError('Invalid captcha code. Please try again.');
+        setCaptchaInput('');
+        refreshCaptcha();
+        setSubmitting(false);
+        return;
+      }
     }
 
     try {
@@ -478,7 +514,7 @@ export default function NewTicketPage() {
 
       setStatus({ type: 'success', message: 'Ticket created successfully!' });
       setTimeout(() => {
-        router.push(`/admin/tickets/${data.ticket.id}`);
+        router.push(`/admin/tickets/${data.ticket.ticketNumber || data.ticket.id}`);
       }, 1500);
     } catch (error) {
       let errorMessage = 'Failed to create ticket. Please try again.';
@@ -499,7 +535,7 @@ export default function NewTicketPage() {
     setExistingTicketsPopup(null);
     // Submit again but without customerId to create new customer
     setSubmitting(true);
-    
+
     // Validate mandatory fields - Product is required
     if (!formData.productId || formData.productId.trim() === '') {
       setStatus({ type: 'error', message: 'Product is required' });
@@ -527,27 +563,29 @@ export default function NewTicketPage() {
       return;
     }
 
-    // Validate captcha - must be present and correct
-    if (!captcha || !captcha.trim()) {
-      setStatus({ type: 'error', message: 'Captcha not loaded. Please refresh the page.' });
-      setSubmitting(false);
-      return;
+    // Validate captcha only if enabled
+    if (captchaSettings.enabledPlacements?.customerTicket) {
+      if (!captcha || !captcha.trim()) {
+        setStatus({ type: 'error', message: 'Captcha not loaded. Please refresh the page.' });
+        setSubmitting(false);
+        return;
+      }
+
+      if (!captchaInput || !captchaInput.trim()) {
+        setCaptchaError('Please enter the captcha code');
+        setSubmitting(false);
+        return;
+      }
+
+      if (captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
+        setCaptchaError('Invalid captcha code. Please try again.');
+        setCaptchaInput('');
+        refreshCaptcha();
+        setSubmitting(false);
+        return;
+      }
     }
 
-    if (!captchaInput || !captchaInput.trim()) {
-      setCaptchaError('Please enter the captcha code');
-      setSubmitting(false);
-      return;
-    }
-
-    if (captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
-      setCaptchaError('Invalid captcha code. Please try again.');
-      setCaptchaInput('');
-      refreshCaptcha();
-      setSubmitting(false);
-      return;
-    }
-    
     try {
       // Use custom value if "Other" is selected for category
       const finalCategory = formData.category === 'Other' ? formData.categoryOther : formData.category;
@@ -615,7 +653,7 @@ export default function NewTicketPage() {
 
       setStatus({ type: 'success', message: 'Ticket created successfully!' });
       setTimeout(() => {
-        router.push(`/admin/tickets/${data.ticket.id}`);
+        router.push(`/admin/tickets/${data.ticket.ticketNumber || data.ticket.id}`);
       }, 1500);
     } catch (error) {
       let errorMessage = 'Failed to create ticket. Please try again.';
@@ -647,11 +685,10 @@ export default function NewTicketPage() {
 
             {/* Status Message */}
             {status.type && (
-              <div className={`flex items-center gap-3 p-4 rounded-2xl border mb-6 ${
-                status.type === 'success' 
-                  ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300' 
+              <div className={`flex items-center gap-3 p-4 rounded-2xl border mb-6 ${status.type === 'success'
+                  ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300'
                   : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
-              }`}>
+                }`}>
                 {status.type === 'success' ? (
                   <CheckCircle className="w-5 h-5" />
                 ) : (
@@ -668,7 +705,7 @@ export default function NewTicketPage() {
                   <User className="w-5 h-5 text-violet-600" />
                   Customer Information
                 </h2>
-                
+
                 {selectedCustomer ? (
                   <div className="p-4 rounded-xl bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800">
                     <div className="flex items-center justify-between">
@@ -750,7 +787,7 @@ export default function NewTicketPage() {
                   <FileText className="w-5 h-5 text-violet-600" />
                   Customer Details
                 </h2>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
@@ -815,7 +852,7 @@ export default function NewTicketPage() {
                   <FileText className="w-5 h-5 text-violet-600" />
                   Ticket Information
                 </h2>
-                
+
                 <div className="space-y-4">
                   {/* Template Selector */}
                   {filteredTemplates.length > 0 && (
@@ -823,24 +860,24 @@ export default function NewTicketPage() {
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                         Use Template (Optional)
                       </label>
-                      <select
+                      <StyledSelect
                         value={selectedTemplateId}
-                        onChange={(e) => handleTemplateSelect(e.target.value)}
-                        className="w-full h-11 px-4 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      >
-                        <option value="">Select a template...</option>
-                        {filteredTemplates.map((template) => (
-                          <option key={template.id} value={template.id}>
-                            {template.name}{template.category ? ` (${template.category})` : ''}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(value) => handleTemplateSelect(value)}
+                        placeholder="Select a template..."
+                        options={[
+                          { value: '', name: 'Select a template...' },
+                          ...filteredTemplates.map((template) => ({
+                            value: template.id,
+                            name: `${template.name}${template.category ? ` (${template.category})` : ''}`
+                          }))
+                        ]}
+                      />
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         Select a template to pre-fill the ticket subject and message
                       </p>
                     </div>
                   )}
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                       Subject *
@@ -873,34 +910,32 @@ export default function NewTicketPage() {
                         <Package className="w-4 h-4" />
                         Product *
                       </label>
-                      <select
-                        required
+                      <StyledSelect
+                        required={true}
                         value={formData.productId}
                         onChange={(e) => setFormData(prev => ({ ...prev, productId: e.target.value, accessoryId: '' }))}
-                        className="w-full h-11 px-4 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      >
-                        <option value="">Select Product</option>
-                        {products.map(product => (
-                          <option key={product.id} value={product.id}>{product.name}</option>
-                        ))}
-                      </select>
+                        placeholder="Select Product"
+                        options={[
+                          { value: '', name: 'Select Product' },
+                          ...products.map(product => ({ value: product.id, name: product.name }))
+                        ]}
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
                         <Package className="w-4 h-4" />
                         Accessory (Optional)
                       </label>
-                      <select
+                      <StyledSelect
                         value={formData.accessoryId}
                         onChange={(e) => setFormData(prev => ({ ...prev, accessoryId: e.target.value }))}
                         disabled={!formData.productId}
-                        className="w-full h-11 px-4 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <option value="">Select Accessory (Optional)</option>
-                        {filteredAccessories.map(accessory => (
-                          <option key={accessory.id} value={accessory.id}>{accessory.name}</option>
-                        ))}
-                      </select>
+                        placeholder="Select Accessory (Optional)"
+                        options={[
+                          { value: '', name: 'Select Accessory (Optional)' },
+                          ...filteredAccessories.map(accessory => ({ value: accessory.id, name: accessory.name }))
+                        ]}
+                      />
                       {!formData.productId && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Please select a product first</p>
                       )}
@@ -910,29 +945,23 @@ export default function NewTicketPage() {
                         <Tag className="w-4 h-4" />
                         Issue Category *
                       </label>
-                      <select
-                        required
+                      <StyledSelect
+                        required={true}
                         value={formData.category}
                         onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                        className="w-full h-11 px-4 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      >
-                        <option value="">Select Category</option>
-                        <option value="WZATCO">WZATCO</option>
-                        <option value="Technical">Technical</option>
-                        <option value="Billing">Billing</option>
-                        <option value="General">General</option>
-                        <option value="Other">Other</option>
-                      </select>
-                      {formData.category === 'Other' && (
-                        <input
-                          type="text"
-                          value={formData.categoryOther || ''}
-                          onChange={(e) => setFormData(prev => ({ ...prev, categoryOther: e.target.value }))}
-                          placeholder="Specify category"
-                          className="w-full h-11 px-4 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent mt-2"
-                          required={formData.category === 'Other'}
-                        />
-                      )}
+                        placeholder="Select Category"
+                        options={
+                          issueCategories.length > 0
+                            ? issueCategories.map((cat) => ({ value: cat.name, name: cat.name }))
+                            : [
+                                { value: 'WZATCO', name: 'WZATCO' },
+                                { value: 'Technical', name: 'Technical' },
+                                { value: 'Billing', name: 'Billing' },
+                                { value: 'General', name: 'General' },
+                                { value: 'Other', name: 'Other' }
+                              ]
+                        }
+                      />
                     </div>
                     {!ticketSettings.hidePriorityCustomer && (
                       <div>
@@ -940,16 +969,17 @@ export default function NewTicketPage() {
                           <AlertCircle className="w-4 h-4" />
                           Priority
                         </label>
-                        <select
+                        <StyledSelect
                           value={formData.priority}
                           onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-                          className="w-full h-11 px-4 rounded-xl border border-violet-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                        >
-                          <option value="low">Low</option>
-                          <option value="medium">Medium</option>
-                          <option value="high">High</option>
-                          <option value="urgent">Urgent</option>
-                        </select>
+                          placeholder="Select Priority"
+                          options={[
+                            { value: 'low', name: 'Low' },
+                            { value: 'medium', name: 'Medium' },
+                            { value: 'high', name: 'High' },
+                            { value: 'urgent', name: 'Urgent' }
+                          ]}
+                        />
                       </div>
                     )}
                     <div>
@@ -1006,58 +1036,58 @@ export default function NewTicketPage() {
                     <Upload className="w-5 h-5 text-violet-600" />
                     Additional File Attachments (Optional)
                   </h2>
-                
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  onChange={handleFileChange}
-                  className="hidden"
-                  accept="image/*,.pdf,.doc,.docx"
-                />
-                
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full h-11 px-4 rounded-xl border border-violet-200 dark:border-slate-700 bg-violet-50 dark:bg-violet-950/20 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-950/30 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload Files
-                </button>
 
-                {attachments.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    {attachments.map(attachment => (
-                      <div key={attachment.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
-                        <div className="flex items-center gap-3">
-                          <FileText className="w-5 h-5 text-violet-600" />
-                          <div>
-                            <p className="text-sm font-medium text-slate-900 dark:text-white">{attachment.filename}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {(attachment.size / 1024).toFixed(2)} KB
-                            </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept="image/*,.pdf,.doc,.docx"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-11 px-4 rounded-xl border border-violet-200 dark:border-slate-700 bg-violet-50 dark:bg-violet-950/20 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-950/30 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Upload Files
+                  </button>
+
+                  {attachments.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      {attachments.map(attachment => (
+                        <div key={attachment.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
+                          <div className="flex items-center gap-3">
+                            <FileText className="w-5 h-5 text-violet-600" />
+                            <div>
+                              <p className="text-sm font-medium text-slate-900 dark:text-white">{attachment.filename}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {(attachment.size / 1024).toFixed(2)} KB
+                              </p>
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(attachment.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => removeAttachment(attachment.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Captcha */}
-              <div className={`bg-white dark:bg-slate-800 rounded-2xl border shadow-sm p-6 ${
-                captchaError 
-                  ? 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/20' 
+              {/* Captcha - Only show if enabled */}
+              {captchaSettings.enabledPlacements?.customerTicket && (
+              <div className={`bg-white dark:bg-slate-800 rounded-2xl border shadow-sm p-6 ${captchaError
+                  ? 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/20'
                   : 'border-violet-200 dark:border-slate-700'
-              }`}>
+                }`}>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
                   Security Verification * <span className="text-red-500">(Required)</span>
                 </label>
@@ -1080,28 +1110,27 @@ export default function NewTicketPage() {
                     </div>
                   </div>
                   <div className="flex-1">
-                      <input
-                        type="text"
-                        value={captchaInput}
-                        onChange={(e) => {
-                          setCaptchaInput(e.target.value);
-                          setCaptchaError('');
-                        }}
-                        onBlur={() => {
-                          // Validate on blur if captcha is entered
-                          if (captchaInput && captcha && captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
-                            setCaptchaError('Invalid captcha code');
-                          }
-                        }}
-                        placeholder="Enter the code above"
-                        className={`w-full h-12 px-4 rounded-lg border ${
-                          captchaError 
-                            ? 'border-red-300 dark:border-red-700 focus:ring-red-500' 
-                            : 'border-slate-300 dark:border-slate-600 focus:ring-violet-500'
+                    <input
+                      type="text"
+                      value={captchaInput}
+                      onChange={(e) => {
+                        setCaptchaInput(e.target.value);
+                        setCaptchaError('');
+                      }}
+                      onBlur={() => {
+                        // Validate on blur if captcha is entered
+                        if (captchaInput && captcha && captchaInput.trim().toUpperCase() !== captcha.toUpperCase()) {
+                          setCaptchaError('Invalid captcha code');
+                        }
+                      }}
+                      placeholder="Enter the code above"
+                      className={`w-full h-12 px-4 rounded-lg border ${captchaError
+                          ? 'border-red-300 dark:border-red-700 focus:ring-red-500'
+                          : 'border-slate-300 dark:border-slate-600 focus:ring-violet-500'
                         } bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2`}
-                        required
-                        autoComplete="off"
-                      />
+                      required
+                      autoComplete="off"
+                    />
                     {captchaError && (
                       <p className="text-sm text-red-600 dark:text-red-400 mt-1 font-medium">{captchaError}</p>
                     )}
@@ -1119,6 +1148,7 @@ export default function NewTicketPage() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Submit Button */}
               <div className="flex items-center justify-end gap-4">
@@ -1154,7 +1184,7 @@ export default function NewTicketPage() {
               <p className="text-slate-600 dark:text-slate-400 mb-4">
                 This customer already has {existingTicketsPopup.length} open ticket(s). Do you want to continue creating a new ticket?
               </p>
-              
+
               <div className="space-y-2 mb-6 max-h-60 overflow-auto">
                 {existingTicketsPopup.map(ticket => (
                   <div key={ticket.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600">
@@ -1167,7 +1197,7 @@ export default function NewTicketPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => router.push(`/admin/tickets/${ticket.id}`)}
+                        onClick={() => router.push(`/admin/tickets/${ticket.ticketNumber || ticket.id}`)}
                         className="text-violet-600 hover:text-violet-700 text-sm font-medium"
                       >
                         View

@@ -3,55 +3,53 @@ generator client {
 }
 
 datasource db {
-  // Use SQLite for local development, PostgreSQL for production
   provider = "sqlite"
   url      = "file:./dev.db"
-  // For PostgreSQL (Vercel/Production), uncomment below and comment above:
-  // provider = "postgresql"
-  // url      = env("DATABASE_URL")
 }
 
 model Department {
-  id            String   @id @default(cuid())
-  name          String   @unique
-  description   String?
-  isActive      Boolean  @default(true)
-  slaConfig     String?  // JSON string for SLA policies (response time, resolution time by priority)
-  workingHours  String?  // JSON string for working hours (e.g., {"monday": {"start": "09:00", "end": "18:00"}, ...})
-  holidays      String?  // JSON array of holiday dates
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  agents        Agent[]
-  routedTickets Conversation[]
-  ticketTemplates TicketTemplate[]
-  escalationRules EscalationRule[]
+  id                    String           @id @default(cuid())
+  name                  String           @unique
+  description           String?
+  isActive              Boolean          @default(true)
+  departmentHeadId      String?
+  slaConfig             String?
+  workingHours          String?
+  holidays              String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  departmentHead        Agent?           @relation("DepartmentHead", fields: [departmentHeadId], references: [id])
+  agents                Agent[]
+  routedTickets         Conversation[]
   escalationAssignRules EscalationRule[] @relation("EscalationAssignDepartment")
+  escalationRules       EscalationRule[]
+  ticketTemplates       TicketTemplate[]
 
   @@index([isActive])
 }
 
 model Role {
-  id            String         @id @default(cuid())
-  title         String         @unique
-  displayAs      String?        // How role appears on tickets
-  hasSuperPower  Boolean        @default(false) // Super admin privileges
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id            String           @id @default(cuid())
+  title         String           @unique
+  displayAs     String?
+  hasSuperPower Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
   agents        Agent[]
-  users         User[]
   permissions   RolePermission[]
+  users         User[]
 
   @@index([hasSuperPower])
 }
 
 model RolePermission {
-  id            String   @id @default(cuid())
-  roleId        String
-  role          Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  pageName      String   // e.g., "admin.dashboard", "admin.tickets", "admin.agents"
-  hasAccess     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  roleId    String
+  pageName  String
+  hasAccess Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, pageName])
   @@index([roleId])
@@ -59,97 +57,162 @@ model RolePermission {
 }
 
 model Agent {
-  id                    String         @id @default(cuid())
-  userId                String?        @unique
-  accountId             String?        @unique
-  account               User?          @relation(fields: [accountId], references: [id])
+  id                    String              @id @default(cuid())
+  userId                String?             @unique
+  accountId             String?             @unique
   name                  String
-  email                 String?        @unique
-  slug                  String         @unique
+  email                 String?             @unique
+  slug                  String              @unique
   departmentId          String?
-  department            Department?    @relation(fields: [departmentId], references: [id])
   roleId                String?
-  role                  Role?          @relation(fields: [roleId], references: [id])
-  skills                String?        // JSON array of skills/categories
-  isActive              Boolean        @default(true)
-  maxLoad               Int?           // Maximum concurrent tickets
-  presenceStatus        String         @default("offline") // online, away, busy, offline, on_leave, in_meeting, dnd
-  lastSeenAt            DateTime?      // Last time agent was seen online
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  skills                String?
+  isActive              Boolean             @default(true)
+  maxLoad               Int?
+  presenceStatus        String              @default("offline")
+  lastSeenAt            DateTime?
+  status                String              @default("ACTIVE") // ACTIVE, ON_LEAVE
+  leaveFrom             DateTime?
+  leaveTo               DateTime?
+  // --- New Profile Fields ---
+  bio                   String?
+  jobTitle              String?
+  mobile                String?
+  extension             String?
+  address               String?
+  city                  String?
+  state                 String?
+  country               String?
+  postal                String?
+  timezone              String?             @default("Asia/Kolkata")
+  language              String?             @default("en")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  role                  Role?               @relation(fields: [roleId], references: [id])
+  department            Department?         @relation(fields: [departmentId], references: [id])
+  account               User?               @relation(fields: [accountId], references: [id])
+  managedDepartments    Department[]        @relation("DepartmentHead")
   assignedConversations Conversation[]
-  worklogs              Worklog[]
   scheduledCallbacks    ScheduledCallback[]
+  worklogs              Worklog[]
+  feedbacks             Feedback[]
+  leaveHistory          LeaveHistory[]
 
   @@index([departmentId])
   @@index([roleId])
   @@index([slug])
   @@index([presenceStatus])
+  @@index([status])
+}
+
+model LeaveHistory {
+  id        String    @id @default(cuid())
+  agentId   String
+  startDate DateTime
+  endDate   DateTime?
+  status    String // 'ON_LEAVE', 'RETURNED'
+  createdAt DateTime  @default(now())
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([status])
+  @@index([startDate])
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  phone     String?
-  avatarUrl String?
-  status    String   @default("active") // active, inactive, archived
-  type      String   @default("agent")  // agent, supervisor, team_lead, admin
-  roleId    String?
-  role      Role?    @relation(fields: [roleId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  agent     Agent?
+  id                  String    @id @default(cuid())
+  name                String
+  email               String    @unique
+  phone               String?
+  avatarUrl           String?
+  password            String?
+  passwordResetToken  String?
+  passwordResetExpiry DateTime?
+  status              String    @default("active")
+  type                String    @default("agent")
+  roleId              String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  agent               Agent?
+  role                Role?     @relation(fields: [roleId], references: [id])
+
+  @@index([passwordResetToken])
+  @@index([email])
 }
 
 model Customer {
-  id            String   @id @default(cuid())
+  id            String         @id @default(cuid())
   name          String
-  email         String?  @unique
+  email         String?        @unique
   phone         String?
   company       String?
   location      String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   conversations Conversation[]
 }
 
 model Conversation {
-  id            String    @id @default(cuid())
-  siteId        String
-  status        String    @default("open")
-  subject       String?
-  assigneeId    String?
-  customerId    String?
-  departmentId  String?   // Department the ticket is routed to
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  lastMessageAt DateTime?
-  category      String?   @default("WZATCO")
-  customerName  String?
-  priority      String?   @default("low")
-  productModel  String?   // Deprecated: kept for backward compatibility
-  productId     String?
-  accessoryId   String?   // Reference to Accessory
-  firstResponseAt DateTime? // Time of first agent response
-  firstResponseTimeSeconds Int? // Time from creation to first response (in seconds)
-  agentTATSeconds Int? // Agent TAT - total time agent spent working (sum of worklogs in seconds)
-  resolutionTimeSeconds Int? // Total time from creation to resolution (in seconds)
-  assignee      Agent?    @relation(fields: [assigneeId], references: [id])
-  customer      Customer? @relation(fields: [customerId], references: [id])
-  department    Department? @relation(fields: [departmentId], references: [id])
-  product       Product?  @relation(fields: [productId], references: [id])
-  accessory     Accessory? @relation(fields: [accessoryId], references: [id])
-  messages      Message[]
-  notes         TicketNote[]
-  activities    TicketActivity[]
-  tags          ConversationTag[]
-  feedbacks     Feedback[]
-  worklogs      Worklog[]
+  ticketNumber             String            @id // Primary key - format: TKT-YYMM-DD-XXX
+  siteId                   String
+  status                   String            @default("open")
+  subject                  String?
+  assigneeId               String?
+  customerId               String?
+  departmentId             String?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  lastMessageAt            DateTime?
+  category                 String?           @default("WZATCO")
+  customerName             String?
+  priority                 String?           @default("low")
+  productModel             String?
+  productId                String?
+  accessoryId              String?
+  firstResponseAt          DateTime?
+  firstResponseTimeSeconds Int?
+  agentTATSeconds          Int?
+  resolutionTimeSeconds    Int?
+  // Ticket creation form fields
+  customerEmail            String?
+  customerPhone            String?
+  customerAltPhone         String?
+  customerAddress          String?
+  orderNumber              String?
+  purchasedFrom            String? // Official Site, Amazon, Flipkart, Other
+  ticketBody               String? // Detailed description/body
+  invoiceUrl               String? // URL to uploaded invoice file
+  additionalDocuments      Json? // Array of document URLs/metadata (max 5 files)
+  projectorImages          Json? // Array of 4 projector image URLs (front, back, left, right)
+  issueVideoLink           String? // Google Drive link
+  issueType                String? // Type of issue
+  issueCategoryId          String? // Reference to IssueCategory
+  // Leave Management fields
+  previousOwnerId          String? // Agent ID who had ticket before leave
+  isClaimable              Boolean           @default(false) // Available for claiming
+  unassignedReason         String? // 'leave', 'manual', 'auto'
+  // Channel tracking
+  createdVia               String?           @default("chat") // chat, widget, email, etc.
+  accessory                Accessory?        @relation(fields: [accessoryId], references: [id])
+  product                  Product?          @relation(fields: [productId], references: [id])
+  department               Department?       @relation(fields: [departmentId], references: [id])
+  customer                 Customer?         @relation(fields: [customerId], references: [id])
+  assignee                 Agent?            @relation(fields: [assigneeId], references: [id])
+  issueCategory            IssueCategory?    @relation(fields: [issueCategoryId], references: [id])
+  tags                     ConversationTag[]
+  feedbacks                Feedback[]
+  messages                 Message[]
+  activities               TicketActivity[]
+  notes                    TicketNote[]
+  worklogs                 Worklog[]
 
   @@index([departmentId])
   @@index([productId])
   @@index([accessoryId])
+  @@index([customerEmail])
+  @@index([status])
+  @@index([issueCategoryId])
+  @@index([isClaimable])
+  @@index([previousOwnerId])
 }
 
 model Message {
@@ -163,8 +226,8 @@ model Message {
   createdAt       DateTime     @default(now())
   editedAt        DateTime?
   clientMessageId String?
-  Conversation    Conversation @relation(fields: [conversationId], references: [id])
   attachments     Attachment[]
+  Conversation    Conversation @relation(fields: [conversationId], references: [ticketNumber])
 
   @@unique([conversationId, clientMessageId])
 }
@@ -188,52 +251,52 @@ model ReadReceipt {
 }
 
 model TicketNote {
-  id              String       @id @default(cuid())
-  conversationId  String
-  content         String
-  createdById     String?
-  createdByName   String?
-  isPrivate       Boolean      @default(true)
-  pinned          Boolean      @default(false)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  Conversation    Conversation @relation(fields: [conversationId], references: [id])
+  id             String       @id @default(cuid())
+  conversationId String
+  content        String
+  createdById    String?
+  createdByName  String?
+  isPrivate      Boolean      @default(true)
+  pinned         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  Conversation   Conversation @relation(fields: [conversationId], references: [ticketNumber])
 
   @@index([conversationId])
 }
 
 model Admin {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  @unique
-  password  String?  // Hashed password for authentication
-  phone     String?
-  role      String?  @default("Admin")
-  avatarUrl String?
-  bio       String?
-  address   String?
-  city      String?
-  state     String?
-  country   String?
-  postal    String?
-  timezone  String?  @default("Asia/Kolkata")
-  notifyEmail Boolean @default(true)
-  notifyPush  Boolean @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  email       String?  @unique
+  phone       String?
+  role        String?  @default("Admin")
+  avatarUrl   String?
+  bio         String?
+  address     String?
+  city        String?
+  state       String?
+  country     String?
+  postal      String?
+  timezone    String?  @default("Asia/Kolkata")
+  notifyEmail Boolean  @default(true)
+  notifyPush  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  password    String?
 }
 
 model TicketActivity {
-  id            String       @id @default(cuid())
-  conversationId String
-  activityType  String       // status_changed, priority_changed, assigned, unassigned, subject_updated, category_updated, product_updated, tag_added, tag_removed
-  oldValue      String?
-  newValue      String?
-  reason        String?      // Reason for priority/status change
-  performedBy   String       @default("admin") // admin, agent
+  id              String       @id @default(cuid())
+  conversationId  String
+  activityType    String
+  oldValue        String?
+  newValue        String?
+  performedBy     String       @default("admin")
   performedByName String?
-  createdAt     DateTime     @default(now())
-  Conversation  Conversation @relation(fields: [conversationId], references: [id])
+  createdAt       DateTime     @default(now())
+  reason          String?
+  Conversation    Conversation @relation(fields: [conversationId], references: [ticketNumber])
 
   @@index([conversationId])
   @@index([createdAt])
@@ -242,20 +305,20 @@ model TicketActivity {
 model Tag {
   id            String            @id @default(cuid())
   name          String            @unique
-  color         String            @default("#8b5cf6") // Default purple color
+  color         String            @default("#8b5cf6")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   conversations ConversationTag[]
 }
 
 model ConversationTag {
-  id            String       @id @default(cuid())
+  id             String       @id @default(cuid())
   conversationId String
-  tagId         String
-  status        String?      // For Video Call Tag: "pending" or "done"
-  createdAt     DateTime     @default(now())
-  Conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  Tag           Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId          String
+  createdAt      DateTime     @default(now())
+  status         String?
+  Tag            Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  Conversation   Conversation @relation(fields: [conversationId], references: [ticketNumber], onDelete: Cascade)
 
   @@unique([conversationId, tagId])
   @@index([conversationId])
@@ -263,27 +326,27 @@ model ConversationTag {
 }
 
 model AssignmentRule {
-  id            String   @id @default(cuid())
-  name          String
-  ruleType      String   // round_robin, load_based, department_match, skill_match
-  priority      Int      @default(0) // Lower number = higher priority
-  enabled       Boolean  @default(true)
-  config        String?  // JSON config for rule-specific settings
-  description   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  ruleType    String
+  priority    Int      @default(0)
+  enabled     Boolean  @default(true)
+  config      String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([enabled, priority])
 }
 
 model AssignmentHistory {
-  id            String   @id @default(cuid())
-  ruleId        String?  // Which rule was used
-  ruleType      String   // round_robin, load_based, etc.
+  id             String   @id @default(cuid())
+  ruleId         String?
+  ruleType       String
   conversationId String
-  assignedToId  String
-  assignedAt    DateTime @default(now())
-  metadata      String?  // JSON for additional info (load count, round-robin index, etc.)
+  assignedToId   String
+  assignedAt     DateTime @default(now())
+  metadata       String?
 
   @@index([ruleType, assignedToId])
   @@index([conversationId])
@@ -291,45 +354,48 @@ model AssignmentHistory {
 }
 
 model SavedFilter {
-  id            String   @id @default(cuid())
-  name          String
-  description   String?
-  filters        String   // JSON string of filter configuration
-  createdBy     String?  // Admin/User ID
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  filters     String
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([createdBy])
 }
 
 model Feedback {
-  id            String       @id @default(cuid())
+  id             String       @id @default(cuid())
   conversationId String
-  rating        Int          // 1-5 scale
-  comment       String?
-  customerId    String?
-  customerName  String?
-  submittedAt   DateTime     @default(now())
-  Conversation  Conversation @relation(fields: [conversationId], references: [id])
+  rating         Int
+  comment        String?
+  customerId     String?
+  customerName   String?
+  agentId        String?
+  submittedAt    DateTime     @default(now())
+  Conversation   Conversation @relation(fields: [conversationId], references: [ticketNumber])
+  agent          Agent?       @relation(fields: [agentId], references: [id])
 
   @@index([conversationId])
   @@index([rating])
   @@index([submittedAt])
+  @@index([agentId])
 }
 
 model ChatFeedback {
-  id            String   @id @default(cuid())
-  messageId     String   // The bot message ID this feedback is for
-  sessionId     String?  // Chat session ID
-  rating        String   // 'like' or 'dislike'
-  feedback      String?  // Optional text feedback
-  userEmail     String?
-  userName      String?
-  userMessage   String?  // The user's original message
-  aiResponse    String?  // The AI's response
-  category      String?  // Category/topic of the conversation
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(cuid())
+  messageId   String
+  sessionId   String?
+  rating      String
+  feedback    String?
+  userEmail   String?
+  userName    String?
+  userMessage String?
+  aiResponse  String?
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([messageId])
   @@index([rating])
@@ -338,37 +404,42 @@ model ChatFeedback {
 }
 
 model Worklog {
-  id            String       @id @default(cuid())
-  conversationId String
-  agentId       String
-  startedAt     DateTime     @default(now())
-  endedAt       DateTime?
-  durationSeconds Int?       // Calculated duration in seconds
-  source        String       @default("manual") // auto, manual
-  description   String?       // Notes for manual entries
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  Conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  Agent         Agent        @relation(fields: [agentId], references: [id])
+  id              String    @id @default(cuid())
+  ticketNumber    String // Relation to Conversation (ticket)
+  agentId         String // Relation to Agent
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime? // Null = Currently Active
+  durationSeconds Int       @default(0) // Calculated ONLY when stopped
+  stopReason      String? // e.g. "Break", "Manual Stop"
+  isSystemAuto    Boolean   @default(false)
 
-  @@index([conversationId])
+  // Relations
+  ticket Conversation @relation(fields: [ticketNumber], references: [ticketNumber], onDelete: Cascade)
+  agent  Agent        @relation(fields: [agentId], references: [id])
+
+  @@index([ticketNumber])
   @@index([agentId])
-  @@index([startedAt])
-  @@index([createdAt])
+}
+
+model WorklogReason {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  type     String // 'BREAK', 'WORK', 'OTHER'
+  isActive Boolean @default(true)
 }
 
 model Notification {
-  id            String    @id @default(cuid())
-  userId        String?   // Admin/Agent user ID (null for global admin notifications)
-  type          String    // assignment, status_change, mention, sla_risk, ticket_created, etc.
-  title         String
-  message       String
-  link          String?   // URL to navigate to (e.g., /admin/tickets/[id])
-  read          Boolean   @default(false)
-  readAt        DateTime?
-  metadata      String?   // JSON string for additional data (ticketId, agentId, etc.)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String    @id @default(cuid())
+  userId    String?
+  type      String
+  title     String
+  message   String
+  link      String?
+  read      Boolean   @default(false)
+  readAt    DateTime?
+  metadata  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([userId])
   @@index([read])
@@ -377,36 +448,36 @@ model Notification {
 }
 
 model Product {
-  id            String   @id @default(cuid())
-  name          String   @unique
-  description   String?
-  category      String?  // Product category/type
-  imageUrl      String?  // Product image URL
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  accessories   Accessory[]
-  documents     ProductDocument[]
-  conversations Conversation[]
+  id              String            @id @default(cuid())
+  name            String            @unique
+  description     String?
+  category        String?
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  imageUrl        String?
+  accessories     Accessory[]
+  conversations   Conversation[]
+  documents       ProductDocument[]
+  tutorials       ProductTutorial?
   ticketTemplates TicketTemplate[]
-  tutorials     ProductTutorial[]
 
   @@index([isActive])
   @@index([category])
 }
 
 model Accessory {
-  id            String   @id @default(cuid())
-  productId     String
-  name          String
-  description   String?
-  imageUrl      String?  // Accessory image URL
-  specifications String? // JSON string for accessory specifications
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
+  id             String         @id @default(cuid())
+  productId      String
+  name           String
+  description    String?
+  specifications String?
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  imageUrl       String?
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
 
   @@unique([productId, name])
   @@index([productId])
@@ -414,51 +485,62 @@ model Accessory {
 }
 
 model ProductDocument {
-  id            String   @id @default(cuid())
-  productId     String
-  name          String
-  description   String?
-  fileUrl       String
-  fileType      String?  // pdf, image, video, etc.
-  fileSize      Int?     // File size in bytes
-  uploadedBy    String?  // Admin/Agent ID who uploaded
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  productId   String
+  name        String
+  description String?
+  fileUrl     String
+  fileType    String?
+  fileSize    Int?
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
 }
 
 model Settings {
-  id            String   @id @default(cuid())
-  key           String   @unique
-  value         String?  // JSON string for complex values, or simple string
-  description   String?
-  category      String?  // basic, captcha, ai, file_upload, ticket, notification, security, advanced
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String  @id @default(cuid())
+  key         String  @unique
+  value       String?
+  description String?
+  category    String?
+
+  // Google Authentication Integration
+  googleClientId      String?
+  googleClientSecret  String?
+  isGoogleAuthEnabled Boolean @default(false)
+
+  // AI Integration
+  aiApiKey    String?
+  aiProvider  String? // 'openai', 'gemini', 'anthropic'
+  isAiEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([category])
   @@index([key])
 }
 
 model TicketTemplate {
-  id            String   @id @default(cuid())
-  name          String   // Template name (e.g., "Projector Not Turning On")
-  description   String?  // Template description
-  subject       String?  // Pre-filled subject
-  message       String   // Pre-filled message/content
-  category      String?  // Template category (e.g., "Technical", "Service", "Delivery")
-  priority      String?  // Default priority (low, medium, high)
-  productId     String?  // Associated product (optional)
-  departmentId  String?  // Associated department (optional)
-  tags          String?  // JSON array of tag IDs to auto-apply
-  isActive      Boolean  @default(true)
-  usageCount    Int      @default(0) // Track how many times template was used
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  product       Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  department    Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  id           String      @id @default(cuid())
+  name         String
+  description  String?
+  subject      String?
+  message      String
+  category     String?
+  priority     String?
+  productId    String?
+  departmentId String?
+  tags         String?
+  isActive     Boolean     @default(true)
+  usageCount   Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  department   Department? @relation(fields: [departmentId], references: [id])
+  product      Product?    @relation(fields: [productId], references: [id])
 
   @@index([isActive])
   @@index([category])
@@ -467,36 +549,29 @@ model TicketTemplate {
 }
 
 model EscalationRule {
-  id            String   @id @default(cuid())
-  name          String   // Rule name (e.g., "High Priority Time Escalation")
-  description   String?  // Rule description
-  ruleType      String   // time_based, priority_based
-  enabled       Boolean  @default(true)
-  priority      Int      @default(0) // Lower number = higher priority (order of execution)
-  
-  // Conditions
-  triggerAfterHours Int? // Hours after ticket creation/update to trigger
-  currentPriority    String? // Current priority to match (low, medium, high, urgent)
-  currentStatus      String? // Current status to match (open, pending, etc.)
-  departmentId       String? // Department filter (optional)
-  
-  // Actions
-  newPriority        String? // New priority to set (low, medium, high, urgent)
-  assignToDepartmentId String? // Department to reassign to
-  assignToAgentId    String? // Agent to reassign to
-  addTagIds          String? // JSON array of tag IDs to add
-  notifyAdmins       Boolean @default(false) // Notify admins when escalated
-  notifyAgents       Boolean @default(false) // Notify agents when escalated
-  
-  // Configuration
-  config            String? // JSON config for additional settings
-  lastRunAt         DateTime? // Last time this rule was executed
-  executionCount    Int      @default(0) // How many times this rule has been executed
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  department    Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  assignToDepartment Department? @relation("EscalationAssignDepartment", fields: [assignToDepartmentId], references: [id], onDelete: SetNull)
+  id                   String      @id @default(cuid())
+  name                 String
+  description          String?
+  ruleType             String
+  enabled              Boolean     @default(true)
+  priority             Int         @default(0)
+  triggerAfterHours    Int?
+  currentPriority      String?
+  currentStatus        String?
+  departmentId         String?
+  newPriority          String?
+  assignToDepartmentId String?
+  assignToAgentId      String?
+  addTagIds            String?
+  notifyAdmins         Boolean     @default(false)
+  notifyAgents         Boolean     @default(false)
+  config               String?
+  lastRunAt            DateTime?
+  executionCount       Int         @default(0)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  assignToDepartment   Department? @relation("EscalationAssignDepartment", fields: [assignToDepartmentId], references: [id])
+  department           Department? @relation(fields: [departmentId], references: [id])
 
   @@index([enabled, priority])
   @@index([ruleType])
@@ -504,20 +579,20 @@ model EscalationRule {
 }
 
 model Webhook {
-  id            String   @id @default(cuid())
-  name          String   // Webhook name (e.g., "HubSpot Integration")
-  description   String?  // Description of what this webhook does
-  url           String   // Webhook URL to send requests to
-  method        String   @default("POST") // HTTP method (POST, PUT, PATCH)
-  events        String   // JSON array of events to listen to (ticket.created, ticket.updated, etc.)
-  headers       String?  // JSON object of custom headers to include
-  secret        String?  // Secret key for webhook signature verification
-  enabled       Boolean  @default(true)
-  retryCount    Int      @default(3) // Number of retry attempts
-  timeout       Int      @default(30000) // Timeout in milliseconds
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  logs          WebhookLog[]
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  url         String
+  method      String       @default("POST")
+  events      String
+  headers     String?
+  secret      String?
+  enabled     Boolean      @default(true)
+  retryCount  Int          @default(3)
+  timeout     Int          @default(30000)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  logs        WebhookLog[]
 
   @@index([enabled])
   @@index([url])
@@ -526,14 +601,14 @@ model Webhook {
 model WebhookLog {
   id            String   @id @default(cuid())
   webhookId     String
-  event         String   // Event that triggered the webhook
-  payload       String   // JSON payload that was sent
-  responseCode  Int?     // HTTP response code
-  responseBody  String?  // Response body from webhook endpoint
+  event         String
+  payload       String
+  responseCode  Int?
+  responseBody  String?
   success       Boolean  @default(false)
-  errorMessage  String?  // Error message if failed
-  attemptNumber Int      @default(1) // Which retry attempt this was
-  duration      Int?     // Duration in milliseconds
+  errorMessage  String?
+  attemptNumber Int      @default(1)
+  duration      Int?
   createdAt     DateTime @default(now())
   webhook       Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
 
@@ -543,18 +618,18 @@ model WebhookLog {
 }
 
 model ApiKey {
-  id            String   @id @default(cuid())
-  name          String   // API key name/description
-  key           String   @unique // The actual API key (hashed)
-  keyPrefix     String   // First 8 characters for display (e.g., "sk_live_")
-  scopes        String   // JSON array of permissions (tickets.read, tickets.write, etc.)
-  expiresAt     DateTime? // Optional expiration date
-  lastUsedAt    DateTime? // Last time this key was used
-  usageCount    Int      @default(0) // How many times this key has been used
-  enabled       Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  createdBy     String?  // Admin/User ID who created this key
+  id         String    @id @default(cuid())
+  name       String
+  key        String    @unique
+  keyPrefix  String
+  scopes     String
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  usageCount Int       @default(0)
+  enabled    Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  createdBy  String?
 
   @@index([enabled])
   @@index([keyPrefix])
@@ -562,17 +637,17 @@ model ApiKey {
 }
 
 model Integration {
-  id            String   @id @default(cuid())
-  name          String   // Integration name (e.g., "HubSpot", "Slack", "Zapier")
-  type          String   // Integration type (webhook, api, oauth, etc.)
-  provider      String?  // Provider name (hubspot, slack, zapier, custom)
-  config        String   // JSON configuration (API keys, endpoints, etc.)
-  enabled       Boolean  @default(true)
-  status        String   @default("active") // active, inactive, error, disconnected
-  lastSyncAt    DateTime? // Last successful sync
-  errorMessage  String?  // Last error message if status is "error"
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String    @id @default(cuid())
+  name         String
+  type         String
+  provider     String?
+  config       String
+  enabled      Boolean   @default(true)
+  status       String    @default("active")
+  lastSyncAt   DateTime?
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([enabled])
   @@index([type])
@@ -580,24 +655,24 @@ model Integration {
 }
 
 model Article {
-  id            String   @id @default(cuid())
+  id            String           @id @default(cuid())
   title         String
-  content       String   // HTML content
-  slug          String   @unique
-  contentType   String   @default("richtext")
+  content       String
+  slug          String           @unique
+  contentType   String           @default("richtext")
   categoryId    String?
-  category      ArticleCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  status        String   @default("draft") // draft, published
-  tags          String?  // JSON array of tags
-  isPublic      Boolean  @default(true)
-  views         Int      @default(0)
-  helpfulVotes  Int      @default(0)
+  status        String           @default("draft")
+  tags          String?
+  isPublic      Boolean          @default(true)
+  views         Int              @default(0)
+  helpfulVotes  Int              @default(0)
   createdById   String?
   createdByName String?
   updatedById   String?
   updatedByName String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  category      ArticleCategory? @relation(fields: [categoryId], references: [id])
 
   @@index([status])
   @@index([categoryId])
@@ -605,20 +680,20 @@ model Article {
   @@index([isPublic])
   @@index([createdAt])
 }
-  
+
 model ArticleCategory {
-  id            String   @id @default(cuid())
-  name          String   @unique
-  description   String?
-  slug          String   @unique
-  parentId      String?
-  parent        ArticleCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children      ArticleCategory[] @relation("CategoryHierarchy")
-  order         Int      @default(0)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  articles      Article[]
+  id          String            @id @default(cuid())
+  name        String            @unique
+  description String?
+  slug        String            @unique
+  parentId    String?
+  order       Int               @default(0)
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  articles    Article[]
+  parent      ArticleCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    ArticleCategory[] @relation("CategoryHierarchy")
 
   @@index([parentId])
   @@index([isActive])
@@ -626,110 +701,62 @@ model ArticleCategory {
 }
 
 model SLAPolicy {
-  id            String   @id @default(cuid())
-  name          String   // Policy name (e.g., "Standard Support SLA")
-  description   String?
-  isDefault     Boolean  @default(false) // Default policy for new tickets
-  isActive      Boolean  @default(true)
-  
-  // Priority-based SLA timers (in minutes)
-  lowResponseTime      Int?  @default(480)   // 8 hours
-  lowResolutionTime    Int?  @default(2880)  // 48 hours
-  mediumResponseTime   Int?  @default(240)   // 4 hours
-  mediumResolutionTime Int?  @default(1440)  // 24 hours
-  highResponseTime     Int?  @default(60)    // 1 hour
-  highResolutionTime   Int?  @default(480)   // 8 hours
-  urgentResponseTime   Int?  @default(15)    // 15 minutes
-  urgentResolutionTime Int?  @default(240)   // 4 hours
-  
-  // Business hours configuration
-  useBusinessHours  Boolean  @default(true)
-  businessHours     String?  // JSON: {"monday": {"start": "09:00", "end": "18:00"}, ...}
-  timezone          String   @default("UTC")
-  holidays          String?  // JSON array of holiday dates
-  
-  // Escalation thresholds (percentage)
-  escalationLevel1  Int      @default(80)  // Warning at 80%
-  escalationLevel2  Int      @default(95)  // Critical at 95%
-  
-  // Pause conditions
-  pauseOnWaiting    Boolean  @default(true)  // Pause when waiting for customer
-  pauseOnHold       Boolean  @default(true)  // Pause when ticket on hold
-  pauseOffHours     Boolean  @default(true)  // Pause outside business hours
-  
-  // Filters - which tickets this policy applies to
-  departmentIds     String?  // JSON array of department IDs (null = all departments)
-  categoryIds       String?  // JSON array of category names (null = all categories)
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  workflows     SLAWorkflow[]
-  timers        SLATimer[]
+  id                   String        @id @default(cuid())
+  name                 String
+  description          String?
+  isDefault            Boolean       @default(false)
+  isActive             Boolean       @default(true)
+  lowResponseTime      Int?          @default(480)
+  lowResolutionTime    Int?          @default(2880)
+  mediumResponseTime   Int?          @default(240)
+  mediumResolutionTime Int?          @default(1440)
+  highResponseTime     Int?          @default(60)
+  highResolutionTime   Int?          @default(480)
+  urgentResponseTime   Int?          @default(15)
+  urgentResolutionTime Int?          @default(240)
+  useBusinessHours     Boolean       @default(true)
+  businessHours        String?
+  timezone             String        @default("UTC")
+  holidays             String?
+  escalationLevel1     Int           @default(80)
+  escalationLevel2     Int           @default(95)
+  pauseOnWaiting       Boolean       @default(true)
+  pauseOnHold          Boolean       @default(true)
+  pauseOffHours        Boolean       @default(true)
+  departmentIds        String?
+  categoryIds          String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  timers               SLATimer[]
 
   @@index([isActive])
   @@index([isDefault])
 }
 
-model SLAWorkflow {
-  id            String   @id @default(cuid())
-  policyId      String
-  policy        SLAPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
-  name          String   // Workflow name
-  description   String?
-  version       Int      @default(1)
-  isActive      Boolean  @default(false) // Only one workflow can be active per policy
-  isDraft       Boolean  @default(true)
-  
-  // Workflow canvas data (JSON)
-  workflowData  String?  // Full workflow configuration (nodes, connections, etc.)
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  publishedAt   DateTime?
-
-  @@index([policyId])
-  @@index([isActive])
-}
-
 model SLATimer {
-  id              String   @id @default(cuid())
-  conversationId  String
-  policyId        String
-  policy          SLAPolicy @relation(fields: [policyId], references: [id])
-  
-  // Timer type
-  timerType       String   // response, resolution
-  
-  // Status
-  status          String   @default("running") // running, paused, stopped, breached
-  
-  // Time tracking (in minutes)
-  targetTime      Int      // Target time from policy
-  elapsedTime     Int      @default(0) // Time consumed so far
-  remainingTime   Int      // Calculated remaining time
-  
-  // Timestamps
-  startedAt       DateTime @default(now())
-  pausedAt        DateTime?
-  resumedAt       DateTime?
-  completedAt     DateTime?
-  breachedAt      DateTime?
-  
-  // Pause tracking
-  totalPausedTime Int      @default(0) // Total time paused (in minutes)
-  pauseReason     String?  // Reason for pause
-  
-  // Escalation tracking
+  id               String      @id @default(cuid())
+  conversationId   String
+  policyId         String
+  timerType        String
+  status           String      @default("running")
+  targetTime       Int
+  elapsedTime      Int         @default(0)
+  remainingTime    Int
+  startedAt        DateTime    @default(now())
+  pausedAt         DateTime?
+  resumedAt        DateTime?
+  completedAt      DateTime?
+  breachedAt       DateTime?
+  totalPausedTime  Int         @default(0)
+  pauseReason      String?
   level1NotifiedAt DateTime?
   level2NotifiedAt DateTime?
   breachNotifiedAt DateTime?
-  
-  // Priority at timer start (SLA changes if priority changes)
-  initialPriority String
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  breaches        SLABreach[]
+  initialPriority  String
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  breaches         SLABreach[]
+  policy           SLAPolicy   @relation(fields: [policyId], references: [id])
 
   @@index([conversationId])
   @@index([policyId])
@@ -738,29 +765,22 @@ model SLATimer {
 }
 
 model SLABreach {
-  id              String   @id @default(cuid())
-  timerId         String
-  timer           SLATimer @relation(fields: [timerId], references: [id], onDelete: Cascade)
-  conversationId  String
-  
-  // Breach details
-  breachType      String   // response_breach, resolution_breach
-  targetTime      Int      // What was the target (in minutes)
-  actualTime      Int      // How long it actually took
-  breachTime      Int      // How much over (in minutes)
-  
-  // Context at time of breach
-  priority        String
-  status          String
-  assignedTo      String?  // Agent ID
-  department      String?  // Department ID
-  
-  // Notifications
-  notificationsSent String? // JSON array of who was notified
-  
-  breachedAt      DateTime @default(now())
-  resolvedAt      DateTime?
-  
+  id                String    @id @default(cuid())
+  timerId           String
+  conversationId    String
+  breachType        String
+  targetTime        Int
+  actualTime        Int
+  breachTime        Int
+  priority          String
+  status            String
+  assignedTo        String?
+  department        String?
+  notificationsSent String?
+  breachedAt        DateTime  @default(now())
+  resolvedAt        DateTime?
+  timer             SLATimer  @relation(fields: [timerId], references: [id], onDelete: Cascade)
+
   @@index([conversationId])
   @@index([timerId])
   @@index([breachType])
@@ -768,54 +788,46 @@ model SLABreach {
 }
 
 model SLAEscalation {
-  id              String   @id @default(cuid())
-  conversationId  String
-  timerId         String?  // Associated timer (if applicable)
-  
-  // Escalation details
-  escalationLevel Int      // 1, 2, 3
-  escalationType  String   // time_based, sla_risk, manual
-  reason          String?
-  
-  // Actions taken
-  priorityChanged Boolean  @default(false)
-  oldPriority     String?
-  newPriority     String?
-  reassigned      Boolean  @default(false)
-  oldAssignee     String?
-  newAssignee     String?
-  
-  // Notifications
-  notifiedUsers   String?  // JSON array of user IDs notified
-  notificationsSent Int    @default(0)
-  
-  escalatedAt     DateTime @default(now())
-  resolvedAt      DateTime?
-  
+  id                String    @id @default(cuid())
+  conversationId    String
+  timerId           String?
+  escalationLevel   Int
+  escalationType    String
+  reason            String?
+  priorityChanged   Boolean   @default(false)
+  oldPriority       String?
+  newPriority       String?
+  reassigned        Boolean   @default(false)
+  oldAssignee       String?
+  newAssignee       String?
+  notifiedUsers     String?
+  notificationsSent Int       @default(0)
+  escalatedAt       DateTime  @default(now())
+  resolvedAt        DateTime?
+
   @@index([conversationId])
   @@index([escalationLevel])
   @@index([escalatedAt])
 }
 
-// Live Chat Model - for widget live chat functionality
 model LiveChat {
-  id                String   @id @default(cuid())
-  customerId        String?  // Optional: for registered users
+  id                String            @id @default(cuid())
+  customerId        String?
   customerName      String
   customerEmail     String
   department        String
-  status            String   @default("waiting") // waiting, active, resolved, closed
+  status            String            @default("waiting")
   assignedAgentId   String?
   assignedAgentName String?
-  startedAt         DateTime @default(now())
-  lastMessageAt     DateTime @default(now())
+  startedAt         DateTime          @default(now())
+  lastMessageAt     DateTime          @default(now())
   resolvedAt        DateTime?
   closedAt          DateTime?
-  tags              String?  // JSON array of tags
-  metadata          Json?    // userAgent, ipAddress, referrer, etc.
+  tags              String?
+  metadata          Json?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
   messages          LiveChatMessage[]
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
 
   @@index([status, lastMessageAt])
   @@index([assignedAgentId, status])
@@ -823,24 +835,24 @@ model LiveChat {
   @@index([startedAt])
 }
 
-// Scheduled Callback - for callback scheduling feature
 model ScheduledCallback {
-  id          String   @id @default(cuid())
-  customerId  String?  // Optional: for registered customers
-  customerName String
-  customerEmail String
-  phoneNumber String
-  countryCode String   @default("+91")
-  scheduledTime DateTime
-  rescheduledTime DateTime? // New proposed time if admin reschedules
-  status      String   @default("pending") // pending, approved, assigned, denied, completed, cancelled, missed, rescheduled
-  agentId     String?  // Assigned agent
-  agent       Agent?   @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  denialReason String? // Reason for denial
-  rescheduleStatus String? // pending_acceptance, accepted, rejected - for rescheduled callbacks
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String    @id @default(cuid())
+  customerId       String?
+  customerName     String
+  customerEmail    String
+  phoneNumber      String
+  countryCode      String    @default("+91")
+  reason           String?   // Customer's reason for requesting callback
+  scheduledTime    DateTime
+  rescheduledTime  DateTime?
+  status           String    @default("pending")
+  agentId          String?
+  denialReason     String?
+  rescheduleStatus String?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  agent            Agent?    @relation(fields: [agentId], references: [id])
 
   @@index([customerEmail])
   @@index([status])
@@ -848,76 +860,201 @@ model ScheduledCallback {
   @@index([agentId])
 }
 
-// Tutorial - for projector tutorials and guides
 model Tutorial {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  category    String   // Setup, Troubleshooting, Maintenance, etc.
-  content     String?  // Markdown content
-  videoUrl    String?
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  category     String
+  content      String?
+  videoUrl     String?
   thumbnailUrl String?
-  order       Int      @default(0)
-  isActive    Boolean  @default(true)
-  views       Int      @default(0)
-  helpful     Int      @default(0)
-  notHelpful  Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  order        Int      @default(0)
+  isActive     Boolean  @default(true)
+  views        Int      @default(0)
+  helpful      Int      @default(0)
+  notHelpful   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([category])
   @@index([isActive])
 }
 
-// Product Tutorials - Links products to tutorials (videos, manuals, etc.)
 model ProductTutorial {
   id                String   @id @default(cuid())
-  productId         String
-  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
-  // Tutorial links
-  manualLink            String?  // Manual Link (PDF/Document)
-  demoVideoLink         String?  // Demo Video Link (Youtube/Google Drive)
-  cleaningVideoLink     String?  // Cleaning Video Link (Youtube/Google Drive)
-  
+  productId         String   @unique
+  manualLink        String?
+  demoVideoLink     String?
+  cleaningVideoLink String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@unique([productId])
   @@index([productId])
 }
 
 model LiveChatMessage {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   chatId      String
-  senderId    String    // Can be customer email or agent ID
-  senderType  String    // customer, agent
+  senderId    String
+  senderType  String
   senderName  String
   content     String
-  timestamp   DateTime  @default(now())
-  read        Boolean   @default(false)
-  attachments Json?     // Array of attachment objects
-  chat        LiveChat  @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  timestamp   DateTime @default(now())
+  read        Boolean  @default(false)
+  attachments Json?
+  chat        LiveChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
   @@index([chatId, timestamp])
   @@index([read])
 }
 
-// OTP Verification - for email verification when accessing tickets
 model OTPVerification {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   email       String
-  otp         String   // 6-digit OTP code
-  purpose     String   @default("ticket_access") // ticket_access, password_reset, etc.
-  attempts    Int      @default(0)
-  maxAttempts Int      @default(5)
-  verified    Boolean  @default(false)
-  verifiedAt   DateTime?
+  otp         String
+  purpose     String    @default("ticket_access")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  verified    Boolean   @default(false)
+  verifiedAt  DateTime?
   expiresAt   DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([email, verified])
   @@index([expiresAt])
   @@index([createdAt])
+}
+
+model Macro {
+  id        String   @id @default(cuid())
+  name      String
+  content   String // Allow long messages (SQLite supports unlimited text)
+  shortcut  String?  @unique // e.g., "/welcome"
+  category  String? // e.g., "Support", "Sales"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([category])
+  @@index([shortcut])
+}
+
+model IssueCategory {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  description   String?
+  isActive      Boolean        @default(true)
+  order         Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  conversations Conversation[]
+
+  @@index([isActive])
+  @@index([order])
+}
+
+// --- SHADOW COMM (INTERNAL CHAT) MODELS ---
+
+model InternalChat {
+  id String @id @default(cuid())
+
+  // Participants (We store IDs manually to allow flexible Admin/Agent mixing)
+  participantOneId   String
+  participantOneType String // "admin" or "agent"
+
+  participantTwoId   String
+  participantTwoType String // "admin" or "agent"
+
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages InternalMessage[]
+
+  @@unique([participantOneId, participantTwoId], name: "unique_participants")
+  @@index([participantOneId])
+  @@index([participantTwoId])
+  @@index([lastMessageAt])
+}
+
+model InternalMessage {
+  id     String       @id @default(cuid())
+  chatId String
+  chat   InternalChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  senderId   String
+  senderType String // "admin" or "agent"
+
+  content  String
+  metadata Json? // For attachments: { attachments: [{ url, type, name, size }] }
+  read     Boolean   @default(false)
+  readAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([chatId])
+  @@index([senderId])
+}
+
+// --- CANNED RESPONSES (MACROS) ---
+
+model CannedResponse {
+  id        String   @id @default(cuid())
+  shortcut  String // e.g., "wifi", "reset", "refund"
+  content   String // The full message text
+  category  String? // Optional category for organization
+  isPublic  Boolean  @default(false) // Shared with all agents/admins
+  createdBy String // Admin or Agent ID
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shortcut, createdBy], name: "unique_shortcut_per_user")
+  @@index([shortcut])
+  @@index([isPublic])
+  @@index([createdBy])
+  @@index([category])
+}
+
+// --- AUTOMATION RULES (ZOHO-STYLE) ---
+
+model Workflow {
+  id          String             @id @default(cuid())
+  name        String
+  trigger     String             // e.g., "TICKET_CREATED", "TICKET_UPDATED", "TICKET_ASSIGNED"
+  isActive    Boolean            @default(true)
+  description String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  conditions  WorkflowCondition[]
+  actions     WorkflowAction[]
+
+  @@index([trigger])
+  @@index([isActive])
+}
+
+model WorkflowCondition {
+  id          String   @id @default(cuid())
+  workflowId  String
+  field       String   // e.g., "status", "priority", "departmentId"
+  operator    String   // e.g., "EQUALS", "NOT_EQUALS", "CONTAINS", "GREATER_THAN", "LESS_THAN"
+  value       String   // The value to compare against
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+}
+
+model WorkflowAction {
+  id          String   @id @default(cuid())
+  workflowId  String
+  actionType  String   // e.g., "ASSIGN_AGENT", "SEND_EMAIL", "UPDATE_STATUS", "ADD_TAG", "SET_PRIORITY"
+  payload     String   // JSON string for flexibility: { "agentId": "...", "status": "...", etc. }
+  order       Int      @default(0) // Order of execution
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([order])
 }

@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { Search, BookOpen, HelpCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import { renderBlocksToHtml, isBlocksContent } from '../../utils/blockRenderer';
 
 export default function KnowledgeBase({ onBack }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -131,7 +132,15 @@ export default function KnowledgeBase({ onBack }) {
               {/* Article Content */}
               <div 
                 className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed article-content"
-                dangerouslySetInnerHTML={{ __html: selectedArticle.content }}
+                dangerouslySetInnerHTML={{ 
+                  __html: (() => {
+                    // Check if content is blocks format and convert to HTML
+                    if (isBlocksContent(selectedArticle.content, selectedArticle.contentType)) {
+                      return renderBlocksToHtml(selectedArticle.content);
+                    }
+                    return selectedArticle.content;
+                  })()
+                }}
                 style={{
                   wordBreak: 'break-word',
                 }}

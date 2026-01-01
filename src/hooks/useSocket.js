@@ -1,46 +1,37 @@
-import { useEffect, useRef } from 'react'
-import { io } from 'socket.io-client'
+/**
+ * useSocket Hook - Singleton Wrapper
+ * Returns the singleton Socket.IO instance instead of creating new connections
+ * This fixes the "multiple connections per page" issue
+ */
+import { useRef, useEffect, useState } from 'react';
+import { getAgentSocket } from '../../lib/agentSocket';
 
-export default function useSocket({ token } = {}) {
-  const socketRef = useRef(null)
+export default function useSocket() {
+  // Use useRef to return the SAME object reference on every render
+  const socketRef = useRef(null);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    // Create client pointing at the Socket.IO path matching server.js configuration
-    // Server is configured with path: '/api/widget/socket' in server.js
-    const socket = io({
-      path: '/api/widget/socket',
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-      auth: { token },
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      forceNew: false,
-      rememberUpgrade: true,
-      upgrade: true
-    })
+    // Only run on client-side (not during SSR)
+    setIsClient(true);
     
-    socketRef.current = socket
+    // Get or create socket singleton
+    const socket = getAgentSocket();
+    socketRef.current = socket;
+    
+    console.log('🔧 useSocket: Initialized', { 
+      socketExists: !!socket, 
+      connected: socket?.connected,
+      id: socket?.id 
+    });
 
-    socket.on('connect', () => {
-      console.log('[useSocket] connected', socket.id)
-      console.log('socket path:', socket.io.opts.path)
-    })
-    socket.on('disconnect', () => {
-      console.log('[useSocket] disconnected')
-    })
-    socket.on('connect_error', (err) => {
-      console.error('[useSocket] connect_error', err)
-    })
-    socket.on('error', (err) => {
-      console.error('[useSocket] error', err)
-    })
-
-    return () => {
-      try { socket.disconnect() } catch (e) {}
+    // Auto-connect if not already connected
+    if (socket && !socket.connected) {
+      console.log('🔌 useSocket: Auto-connecting socket...');
+      socket.connect();
     }
-  }, [token])
+  }, []);
 
-  return socketRef
+  // Return the SAME ref object every time (stable reference)
+  return socketRef; 
 }

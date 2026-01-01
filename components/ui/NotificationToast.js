@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom';
 import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-export default function NotificationToast({ notification, onClose }) {
+export default function NotificationToast({ notification, onClose, onClick }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -24,7 +24,9 @@ export default function NotificationToast({ notification, onClose }) {
 
   return createPortal(
     <div className="fixed top-24 right-6 z-[10000] animate-slide-in-right">
-      <div className={`px-5 py-4 rounded-xl shadow-2xl border-2 backdrop-blur-sm min-w-[320px] max-w-[500px] ${
+      <div 
+        onClick={onClick}
+        className={`px-5 py-4 rounded-xl shadow-2xl border-2 backdrop-blur-sm min-w-[320px] max-w-[500px] ${onClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''} ${
         notification.type === 'success' 
           ? 'bg-green-500 dark:bg-green-600 border-green-400 dark:border-green-500 text-white' 
           : notification.type === 'error'

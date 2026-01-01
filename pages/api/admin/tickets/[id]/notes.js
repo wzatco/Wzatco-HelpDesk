@@ -1,16 +1,46 @@
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '../../../../../lib/prisma';
 import { parseMentions, findUserByMention } from '../../../../../lib/utils/mentions';
 import { notifyMention } from '../../../../../lib/utils/notifications';
-
-const prisma = new PrismaClient();
+import { verifyToken } from '../../../../../lib/auth';
 
 export default async function handler(req, res) {
+  // Ensure Prisma is connected before proceeding
+  await ensurePrismaConnected();
+
   const { id } = req.query; // conversationId
+
+  // Get current admin ID from token
+  const decoded = verifyToken(req);
+  const adminId = decoded?.adminId || decoded?.userId || null;
 
   try {
     if (req.method === 'GET') {
+      // Get admin.id if adminId is actually a userId
+      let actualAdminId = adminId;
+      if (adminId) {
+        const userAdmin = await prisma.admin.findFirst({
+          where: { userId: adminId },
+          select: { id: true }
+        }).catch(() => null);
+        
+        // Use admin.id if found, otherwise use adminId as-is
+        if (userAdmin) {
+          actualAdminId = userAdmin.id;
+        }
+      }
+
+      // Security: Filter notes - show public notes OR private notes created by this admin
       const notes = await prisma.ticketNote.findMany({
-        where: { conversationId: id },
+        where: {
+          conversationId: id,
+          OR: [
+            { isPrivate: false }, // Everyone sees public notes
+            ...(actualAdminId ? [
+              { isPrivate: true, createdById: actualAdminId }, // Admin's private notes
+              ...(adminId !== actualAdminId ? [{ isPrivate: true, createdById: adminId }] : []) // Also check original adminId
+            ] : [])
+          ]
+        },
         orderBy: [
           { pinned: 'desc' },
           { createdAt: 'desc' }
@@ -28,12 +58,31 @@ export default async function handler(req, res) {
       }
 
       // Get current admin profile for note attribution
-      const adminProfile = await prisma.admin.findFirst({
-        where: { email: 'admin@wzatco.com' }
-      }).catch(() => null);
+      let createdById = adminId || 'admin';
+      let createdByName = 'Admin';
 
-      const createdById = adminProfile?.id || 'admin';
-      const createdByName = adminProfile?.name || 'Admin';
+      if (adminId) {
+        const adminProfile = await prisma.admin.findUnique({
+          where: { id: adminId },
+          select: { id: true, name: true }
+        }).catch(() => null);
+
+        if (adminProfile) {
+          createdById = adminProfile.id;
+          createdByName = adminProfile.name || 'Admin';
+        } else {
+          // Fallback: try to find by userId if adminId not found
+          const userAdmin = await prisma.admin.findFirst({
+            where: { userId: adminId },
+            select: { id: true, name: true }
+          }).catch(() => null);
+
+          if (userAdmin) {
+            createdById = userAdmin.id;
+            createdByName = userAdmin.name || 'Admin';
+          }
+        }
+      }
 
       const note = await prisma.ticketNote.create({
         data: {
@@ -48,8 +97,8 @@ export default async function handler(req, res) {
 
       // Get ticket info for notifications
       const conversation = await prisma.conversation.findUnique({
-        where: { id },
-        select: { id: true, subject: true }
+        where: { ticketNumber: id },
+        select: { ticketNumber: true, subject: true }
       });
 
       // Parse and handle @mentions
@@ -62,7 +111,7 @@ export default async function handler(req, res) {
             if (user && user.id !== createdById) {
               // Send mention notification
               await notifyMention(prisma, {
-                ticketId: conversation.id,
+                ticketId: conversation.ticketNumber,
                 ticketSubject: conversation.subject,
                 mentionedUserId: user.id,
                 mentionedUserName: user.name,
@@ -85,8 +134,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Notes API error:', error);
     res.status(500).json({ message: 'Internal server error' });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

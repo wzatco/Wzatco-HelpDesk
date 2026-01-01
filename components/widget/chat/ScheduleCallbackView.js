@@ -8,6 +8,7 @@ export default function ScheduleCallbackView({ userInfo, onBack }) {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [reason, setReason] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
   const timeSlots = [
@@ -32,6 +33,7 @@ export default function ScheduleCallbackView({ userInfo, onBack }) {
           date: selectedDate,
           time: selectedTime,
           phoneNumber,
+          reason: reason.trim() || null,
           email: userInfo?.email,
           name: userInfo?.name
         })
@@ -147,6 +149,20 @@ export default function ScheduleCallbackView({ userInfo, onBack }) {
               placeholder="+91 1234567890"
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-pink-500 placeholder-gray-400 dark:placeholder-gray-500 text-sm"
               required
+            />
+          </div>
+
+          {/* Reason for Callback */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Reason for Callback (Optional)
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Please describe why you need a callback..."
+              rows={3}
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 dark:focus:ring-pink-500 placeholder-gray-400 dark:placeholder-gray-500 text-sm resize-none"
             />
           </div>
 

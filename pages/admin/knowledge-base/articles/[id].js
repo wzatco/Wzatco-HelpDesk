@@ -6,6 +6,7 @@ import AdminLayout from '../../../../components/admin/universal/AdminLayout';
 import { Button } from '../../../../components/ui/button';
 import { Badge } from '../../../../components/ui/badge';
 import { withAuth } from '../../../../lib/withAuth';
+import { renderBlocksToHtml, isBlocksContent } from '../../../../utils/blockRenderer';
 import {
   BookOpen,
   ArrowLeft,
@@ -74,10 +75,20 @@ export default function ArticleDetailPage() {
       <div className="space-y-6">
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-6">
           {article.content ? (
-            <div
-              className="prose prose-slate max-w-none dark:prose-invert prose-headings:mt-6 prose-headings:mb-3 prose-p:mb-4"
-              dangerouslySetInnerHTML={{ __html: article.content }}
-            />
+            (() => {
+              // Check if content is blocks format and convert to HTML
+              const isBlocks = isBlocksContent(article.content, article.contentType);
+              const htmlContent = isBlocks 
+                ? renderBlocksToHtml(article.content)
+                : article.content;
+              
+              return (
+                <div
+                  className="prose prose-slate max-w-none dark:prose-invert prose-headings:mt-6 prose-headings:mb-3 prose-p:mb-4"
+                  dangerouslySetInnerHTML={{ __html: htmlContent }}
+                />
+              );
+            })()
           ) : (
             <p className="text-slate-500 dark:text-slate-400">This article has no content yet.</p>
           )}
@@ -172,7 +183,7 @@ export default function ArticleDetailPage() {
                   <Button
                     variant="outline"
                     onClick={() => window.open(`/knowledge-base/${article.slug}`, '_blank')}
-                    className="border-white/30 text-white hover:bg-white/10"
+                    className="!bg-transparent !border-white/30 !text-white hover:!bg-white/20 hover:!border-white/50 hover:!text-white dark:!border-white/30 dark:!text-white dark:hover:!bg-white/10 dark:hover:!border-white/50"
                   >
                     <ExternalLink className="w-4 h-4 mr-2" />
                     Open Public View

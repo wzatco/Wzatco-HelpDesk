@@ -1,8 +1,9 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma, { ensurePrismaConnected } from '../../../../../lib/prisma';
 
 export default async function handler(req, res) {
+  // Ensure Prisma is connected before proceeding
+  await ensurePrismaConnected();
+
   try {
     if (req.method === 'GET') {
       // Get all active timers with filters
@@ -37,9 +38,18 @@ export default async function handler(req, res) {
       const enrichedTimers = timers.map(timer => {
         const now = new Date();
         const startedAt = new Date(timer.startedAt);
-        const elapsedMinutes = Math.floor((now - startedAt) / 60000) - timer.totalPausedTime;
-        const remainingMinutes = timer.targetTime - elapsedMinutes;
-        const percentageElapsed = (elapsedMinutes / timer.targetTime) * 100;
+        // Calculate elapsed time accounting for paused time
+        let elapsedMinutes = Math.floor((now - startedAt) / 60000);
+        if (timer.pausedAt) {
+          // If currently paused, don't count time since pause
+          const pausedAt = new Date(timer.pausedAt);
+          elapsedMinutes -= Math.floor((now - pausedAt) / 60000);
+        }
+        elapsedMinutes -= timer.totalPausedTime;
+        elapsedMinutes = Math.max(0, elapsedMinutes); // Ensure non-negative
+        
+        const remainingMinutes = Math.max(0, timer.targetTime - elapsedMinutes);
+        const percentageElapsed = Math.min(100, (elapsedMinutes / timer.targetTime) * 100);
 
         let displayStatus = 'on_track';
         if (timer.status === 'breached') {

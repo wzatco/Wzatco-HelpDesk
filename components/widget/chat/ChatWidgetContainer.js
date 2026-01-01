@@ -80,6 +80,7 @@ export default function ChatWidgetContainer({ isOpen, onClose, position = 'botto
       email: user.email,
       expiresAt: expiresAt.toISOString(),
       createdAt: existingData.createdAt || new Date().toISOString(),
+      authMethod: user.authMethod || existingData.authMethod || 'email', // Track authentication method
       // Preserve OTP verification if session is still valid
       otpVerifiedAt: otpVerifiedAt || existingData.otpVerifiedAt || null
     };
@@ -96,10 +97,43 @@ export default function ChatWidgetContainer({ isOpen, onClose, position = 'botto
     saveUserInfo(user);
   };
 
+  // Sync Google Auth token with Socket token (runs on mount and periodically)
+  useEffect(() => {
+    // Check if we have a Google Auth session but no socket token
+    const checkAndSyncToken = async () => {
+      const currentToken = typeof window !== 'undefined' ? localStorage.getItem('widget_token') : null;
+      
+      // Only fetch token if we don't have one
+      if (!currentToken) {
+        try {
+          const response = await fetch('/api/widget/auth/token');
+          const data = await response.json();
+          
+          if (data.success && data.token) {
+            localStorage.setItem('widget_token', data.token);
+            // Token saved - socket connections will pick it up on next connection/reconnect
+          }
+        } catch (error) {
+          // Silently fail - user can still use widget without socket token
+          // This is expected if user is not authenticated via Google
+        }
+      }
+    };
+
+    // Check immediately on mount
+    checkAndSyncToken();
+
+    // Also check periodically (every 30 seconds) in case user signs in with Google in another tab
+    const interval = setInterval(checkAndSyncToken, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Handle logout
   const handleLogout = () => {
     localStorage.removeItem('chat-widget-user');
     localStorage.removeItem('chat-widget-history'); // Optional: clear history on logout
+    localStorage.removeItem('widget_token'); // Also remove socket token on logout
     setUserInfo(null);
     setShowLogin(true);
     setShowProfileMenu(false);
@@ -165,8 +199,8 @@ export default function ChatWidgetContainer({ isOpen, onClose, position = 'botto
   };
 
   return (
-    <div className={`fixed ${getPositionClasses()} z-[9999] w-full h-full sm:w-auto sm:h-auto sm:max-w-[420px] sm:max-h-[700px]`}>
-      <div className="w-full h-full sm:w-[420px] sm:h-[700px] bg-white dark:bg-gray-900 sm:rounded-xl shadow-2xl overflow-hidden flex flex-col sm:border border-gray-200 dark:border-gray-700">
+    <div className={`fixed ${getPositionClasses()} z-[9999] w-full h-full sm:w-auto sm:h-auto sm:max-w-[420px] md:max-w-[450px]`}>
+      <div className="w-full h-full sm:w-[420px] md:w-[450px] sm:h-[calc(100vh-2rem)] sm:max-h-[700px] sm:min-h-[500px] md:max-h-[750px] md:min-h-[550px] lg:max-h-[800px] lg:min-h-[600px] bg-white dark:bg-gray-900 sm:rounded-xl shadow-2xl overflow-hidden flex flex-col sm:border border-gray-200 dark:border-gray-700">
         {/* Header - Only show if logged in */}
         {!showLogin && userInfo && (
           <div className="bg-gradient-to-r from-purple-700 via-pink-600 to-red-600 text-white px-4 py-3 flex items-center justify-between relative">
@@ -284,9 +318,9 @@ export default function ChatWidgetContainer({ isOpen, onClose, position = 'botto
                           
                           // Check if session is still valid
                           if (isSessionValid(userData)) {
-                            // Check if OTP was verified (and verification is still valid - same session)
-                            if (userData.otpVerifiedAt) {
-                              // OTP was verified in this session - allow access
+                            // Check if OTP was verified OR user authenticated with Google
+                            if (userData.otpVerifiedAt || userData.authMethod === 'google') {
+                              // OTP was verified OR Google authenticated - allow access
                               setCurrentView(optionId);
                               setShowMenu(false);
                               return;
@@ -326,6 +360,7 @@ export default function ChatWidgetContainer({ isOpen, onClose, position = 'botto
                   onSubmit={showEditProfile ? saveUserInfo : handleLogin}
                   userInfo={showEditProfile ? userInfo : null}
                   onCancel={showEditProfile ? () => setShowEditProfile(false) : null}
+                  onClose={onClose}
                   isEditMode={showEditProfile}
                 />
               ) : (

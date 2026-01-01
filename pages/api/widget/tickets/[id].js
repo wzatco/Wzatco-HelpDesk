@@ -44,11 +44,10 @@ export default async function handler(req, res) {
         });
       }
 
-      // Fetch ticket (conversation) with messages
-      const ticket = await prisma.conversation.findFirst({
+      // Fetch ticket (conversation) by ticketNumber with messages
+      const ticket = await prisma.conversation.findUnique({
         where: {
-          id: id,
-          customerId: customer.id // Ensure customer owns this ticket
+          ticketNumber: id
         },
         include: {
           messages: {
@@ -71,6 +70,12 @@ export default async function handler(req, res) {
               id: true,
               name: true
             }
+          },
+          feedbacks: {
+            orderBy: {
+              submittedAt: 'desc'
+            },
+            take: 1 // Only get the most recent feedback
           }
         }
       });
@@ -84,8 +89,8 @@ export default async function handler(req, res) {
 
       // Format response
       const formattedTicket = {
-        id: ticket.id,
-        subject: ticket.subject || `Ticket #${ticket.id}`,
+        ticketNumber: ticket.ticketNumber,
+        subject: ticket.subject || `Ticket #${ticket.ticketNumber}`,
         status: ticket.status || 'open',
         priority: ticket.priority || 'medium',
         createdAt: ticket.createdAt,
@@ -101,6 +106,13 @@ export default async function handler(req, res) {
           id: ticket.department.id,
           name: ticket.department.name
         } : null,
+        feedbacks: ticket.feedbacks.map(fb => ({
+          id: fb.id,
+          rating: fb.rating,
+          comment: fb.comment,
+          customerName: fb.customerName,
+          submittedAt: fb.submittedAt
+        })),
         messages: await Promise.all(ticket.messages.map(async (msg) => {
           // Fetch replyTo message if exists
           let replyTo = null;

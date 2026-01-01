@@ -1,12 +1,54 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import AdminLayout from '../../../components/admin/universal/AdminLayout';
 import PageHead from '../../../components/admin/PageHead';
-import { BarChart3, Package, AlertCircle, Clock, Users, TrendingUp, Download, Calendar, Filter, Building2, Star } from 'lucide-react';
+import { BarChart3, Package, AlertCircle, Clock, Users, TrendingUp, Download, Calendar, Filter, Building2, Star, Phone, Sparkles, Loader2, XIcon, Target, Award, Activity, CheckCircle2, XCircle, TrendingDown } from 'lucide-react';
+import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 import { withAuth } from '../../../lib/withAuth';
+
+// Simple markdown parser for AI analysis
+function parseMarkdown(text) {
+  if (!text) return '';
+  
+  let html = text;
+  
+  // Headers
+  html = html.replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-slate-900 dark:text-white mt-6 mb-3">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-slate-900 dark:text-white mt-8 mb-4">$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-slate-900 dark:text-white mt-8 mb-4">$1</h1>');
+  
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-slate-900 dark:text-white">$1</strong>');
+  
+  // Italic
+  html = html.replace(/\*(.+?)\*/g, '<em class="italic">$1</em>');
+  
+  // Bullet points
+  html = html.replace(/^[\s]*[-*]\s+(.*)$/gim, '<li class="ml-4 mb-2">$1</li>');
+  
+  // Numbered lists
+  html = html.replace(/^[\s]*\d+\.\s+(.*)$/gim, '<li class="ml-4 mb-2">$1</li>');
+  
+  // Wrap consecutive list items
+  html = html.replace(/(<li[^>]*>.*<\/li>\n?)+/gs, '<ul class="list-disc space-y-1 my-3">$&</ul>');
+  
+  // Line breaks
+  html = html.replace(/\n\n/g, '</p><p class="mb-4">');
+  html = '<p class="mb-4">' + html + '</p>';
+  
+  // Code blocks (inline)
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
+  
+  return html;
+}
+
 function ReportsPageContent({ initialTab = 'products' }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [loading, setLoading] = useState(true);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiAnalysis, setShowAiAnalysis] = useState(false);
   const formatDate = (date) => date.toISOString().split('T')[0];
   const quickRanges = [
     { id: '7d', label: 'Last 7 days', days: 7 },
@@ -28,13 +70,15 @@ function ReportsPageContent({ initialTab = 'products' }) {
   const [agentData, setAgentData] = useState([]);
   const [departmentData, setDepartmentData] = useState([]);
   const [csatData, setCsatData] = useState(null);
+  const [callbackData, setCallbackData] = useState([]);
   const [summary, setSummary] = useState({
     products: null,
     issues: null,
     tat: null,
     agents: null,
     departments: null,
-    csat: null
+    csat: null,
+    callbacks: null
   });
   const [error, setError] = useState(null);
 
@@ -56,7 +100,8 @@ function ReportsPageContent({ initialTab = 'products' }) {
     { id: 'tat', name: 'TAT Reports', icon: Clock },
     { id: 'agents', name: 'Agent Performance', icon: Users },
     { id: 'departments', name: 'Department Analytics', icon: Building2 },
-    { id: 'csat', name: 'CSAT Report', icon: Star }
+    { id: 'csat', name: 'CSAT Report', icon: Star },
+    { id: 'callbacks', name: 'Callback Reports', icon: Phone }
   ];
 
   useEffect(() => {
@@ -212,15 +257,58 @@ function ReportsPageContent({ initialTab = 'products' }) {
       } else if (activeTab === 'csat') {
         const res = await fetch(`/api/admin/reports/csat?${params}`);
         const data = await res.json();
+        console.log('📊 CSAT API Response:', data);
         if (data.success) {
-          const csat = data.data || null;
+          const csat = data.data || {
+            summary: {
+              totalFeedbacks: 0,
+              averageRating: 0,
+              csatScore: 0,
+              ratingDistribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+            },
+            agentMetrics: [],
+            departmentMetrics: [],
+            recentFeedbacks: []
+          };
+          console.log('✅ Setting CSAT data:', csat);
           setCsatData(csat);
           setSummary((prev) => ({
             ...prev,
-            csat: csat?.summary || null
+            csat: csat?.summary || {
+              totalFeedbacks: 0,
+              averageRating: 0,
+              csatScore: 0,
+              ratingDistribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+            }
           }));
         } else {
+          console.error('❌ CSAT API Error:', data);
           setError(data.message || 'Unable to load CSAT report');
+          // Set default empty data on error so UI still renders
+          setCsatData({
+            summary: {
+              totalFeedbacks: 0,
+              averageRating: 0,
+              csatScore: 0,
+              ratingDistribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+            },
+            agentMetrics: [],
+            departmentMetrics: [],
+            recentFeedbacks: []
+          });
+        }
+      } else if (activeTab === 'callbacks') {
+        const res = await fetch(`/api/admin/reports/callbacks?${params}`);
+        const data = await res.json();
+        if (data.success) {
+          const callbacks = data.data || [];
+          setCallbackData(callbacks);
+          setSummary((prev) => ({
+            ...prev,
+            callbacks: data.summary || null
+          }));
+        } else {
+          setError(data.message || 'Unable to load callback reports');
         }
       }
     } catch (error) {
@@ -231,26 +319,107 @@ function ReportsPageContent({ initialTab = 'products' }) {
     }
   };
 
+  const handleAIAnalysis = async () => {
+    try {
+      setAiLoading(true);
+      setAiAnalysis(null);
+
+      // Gather metrics from current tab data
+      const metrics = {
+        dateRange: `${dateRange.startDate} to ${dateRange.endDate}`,
+        ticketVolume: 0,
+        csatScore: null,
+        slaCompliance: null,
+        activeTab
+      };
+
+      // Collect metrics based on active tab
+      if (activeTab === 'products' && summary.products) {
+        metrics.ticketVolume = summary.products.totalTickets;
+        metrics.topProduct = summary.products.topProduct?.name;
+      } else if (activeTab === 'tat' && summary.tat) {
+        metrics.ticketVolume = summary.tat.totalTickets;
+        metrics.slaCompliance = summary.tat.compliance;
+        metrics.exceededTickets = summary.tat.exceeded;
+      } else if (activeTab === 'agents' && summary.agents) {
+        metrics.totalAgents = summary.agents.totalAgents;
+        metrics.avgResolutionRate = summary.agents.avgResolutionRate;
+        metrics.avgFirstResponse = summary.agents.avgFRT;
+      } else if (activeTab === 'csat' && summary.csat) {
+        metrics.csatScore = summary.csat.csatScore;
+        metrics.totalFeedbacks = summary.csat.totalFeedbacks;
+        metrics.csatDistribution = summary.csat;
+      }
+
+      // Call AI analysis API
+      const response = await fetch('/api/admin/reports/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          metrics,
+          dateRange
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setAiAnalysis(data.analysis);
+        setShowAiAnalysis(true);
+      } else {
+        alert('Failed to generate AI analysis: ' + data.message);
+      }
+    } catch (error) {
+      console.error('Error generating AI analysis:', error);
+      alert('Failed to generate AI analysis. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const handleExport = async () => {
     try {
       const params = new URLSearchParams({
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
-        type: activeTab
+        type: activeTab,
+        format: 'csv' // Explicitly request CSV format
       });
       const res = await fetch(`/api/admin/reports/export?${params}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Export failed' }));
+        console.error('Export error:', errorData);
+        throw new Error(errorData.message || errorData.error || 'Export failed');
+      }
       const blob = await res.blob();
+      
+      // Check if the response is JSON (error) or CSV
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('json')) {
+        // If it's JSON, it's an error response
+        const text = await blob.text();
+        try {
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.message || errorData.error || 'Export failed');
+        } catch (e) {
+          throw new Error('Invalid response from server');
+        }
+      }
+      
+      // CSV format
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${activeTab}-report-${dateRange.startDate}-${dateRange.endDate}.csv`;
+      a.download = `${activeTab}-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
       console.error('Error exporting report:', error);
-      alert('Failed to export report');
+      alert(`Failed to export report: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -443,6 +612,36 @@ function ReportsPageContent({ initialTab = 'products' }) {
           </div>
         );
       }
+      case 'callbacks': {
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <SummaryCard
+              title="Total Callbacks"
+              value={currentSummary.totalCallbacks}
+              subtitle="Scheduled in range"
+              gradient="from-violet-600 to-purple-600"
+            />
+            <SummaryCard
+              title="Completed"
+              value={currentSummary.statusCounts?.completed || 0}
+              subtitle="Successfully completed"
+              gradient="from-emerald-600 to-teal-500"
+            />
+            <SummaryCard
+              title="Completion Rate"
+              value={`${currentSummary.completionRate || 0}%`}
+              subtitle="% of total callbacks"
+              gradient="from-blue-600 to-cyan-500"
+            />
+            <SummaryCard
+              title="Pending"
+              value={currentSummary.statusCounts?.pending || 0}
+              subtitle="Awaiting callback"
+              gradient="from-amber-500 to-orange-500"
+            />
+          </div>
+        );
+      }
       default:
         return null;
     }
@@ -506,13 +705,34 @@ function ReportsPageContent({ initialTab = 'products' }) {
                   />
                 </label>
               </div>
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl font-medium transition-colors shadow-md"
-              >
-                <Download className="w-4 h-4" />
-                Export CSV
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleAIAnalysis}
+                  disabled={aiLoading || loading || !summary}
+                  className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl font-medium transition-all shadow-md"
+                  title="Generate AI-powered insights from current report data"
+                >
+                  {aiLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Analyze with AI
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleExport}
+                  className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl font-medium transition-colors shadow-md"
+                  title={`Export ${activeTab} report (Excel/CSV) for ${dateRange.startDate} to ${dateRange.endDate}`}
+                >
+                  <Download className="w-4 h-4" />
+                  Export Report
+                </button>
+              </div>
             </div>
           </div>
 
@@ -576,6 +796,9 @@ function ReportsPageContent({ initialTab = 'products' }) {
             {activeTab === 'csat' && (
               <CSATReport data={csatData} />
             )}
+            {activeTab === 'callbacks' && (
+              <CallbackReport data={callbackData} summary={summary.callbacks} />
+            )}
           </div>
 
           {loading && (
@@ -588,9 +811,118 @@ function ReportsPageContent({ initialTab = 'products' }) {
           )}
         </div>
       </div>
+
+        {/* AI Analysis Modal */}
+        {showAiAnalysis && aiAnalysis && typeof window !== 'undefined' && createPortal(
+          <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowAiAnalysis(false);
+              }
+            }}
+          >
+            <div 
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 rounded-t-2xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                      <Sparkles className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white">
+                        AI-Powered Analytics Report
+                      </h3>
+                      <p className="text-sm text-white/90 mt-1">
+                        {dateRange.startDate} to {dateRange.endDate} • {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Analysis
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowAiAnalysis(false)}
+                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  >
+                    <XIcon className="w-6 h-6 text-white" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="overflow-y-auto flex-1">
+                <div className="p-6">
+                  {/* AI Analysis Text */}
+                  <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50 rounded-xl p-6 border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Sparkles className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                      <h4 className="text-lg font-semibold text-slate-900 dark:text-white">AI Insights</h4>
+                    </div>
+                    <div className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                      <div 
+                        dangerouslySetInnerHTML={{ __html: parseMarkdown(aiAnalysis) }}
+                        className="markdown-content"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 rounded-b-2xl flex items-center justify-between">
+                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  <span>Report generated by AI • {new Date().toLocaleString()}</span>
+                </div>
+                <button
+                  onClick={() => setShowAiAnalysis(false)}
+                  className="px-6 py-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg"
+                >
+                  Close Report
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
         </div>
       </AdminLayout>
     </>
+  );
+}
+
+// Metric Card Component for AI Modal
+function MetricCard({ icon, label, value, subtitle, gradient }) {
+  return (
+    <div className={`rounded-xl p-4 bg-gradient-to-br ${gradient} text-white shadow-lg`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+          {icon}
+        </div>
+      </div>
+      <div className="mt-2">
+        <p className="text-xs font-medium text-white/80 uppercase tracking-wide">{label}</p>
+        <p className="text-2xl font-bold mt-1 truncate">{value}</p>
+        {subtitle && <p className="text-xs text-white/70 mt-1">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+
+// Chart Card Component for AI Modal
+function ChartCard({ title, icon, children }) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="text-violet-600 dark:text-violet-400">
+          {icon}
+        </div>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h4>
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -632,6 +964,14 @@ function ProductAnalytics({ data, accessories = [] }) {
                     : 'N/A'}
                 </span>
               </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600 dark:text-slate-400">Avg Active:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  {product.avgActiveHours > 0 
+                    ? `${product.avgActiveHours.toFixed(1)}h`
+                    : 'N/A'}
+                </span>
+              </div>
               {product.accessories && product.accessories.length > 0 && (
                 <div className="flex justify-between text-sm pt-1 border-t border-slate-200 dark:border-slate-600">
                   <span className="text-slate-600 dark:text-slate-400">Accessories:</span>
@@ -655,6 +995,7 @@ function ProductAnalytics({ data, accessories = [] }) {
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Open</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Resolved</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg Resolution</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg Active Time</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Accessories</th>
               </tr>
             </thead>
@@ -670,6 +1011,18 @@ function ProductAnalytics({ data, accessories = [] }) {
                     {product.averageResolutionTime > 0 
                       ? `${product.averageResolutionTime.toFixed(1)}h`
                       : 'N/A'}
+                  </td>
+                  <td className="py-3 px-4 text-sm text-center">
+                    {product.avgActiveHours > 0 ? (
+                      <span 
+                        className="font-bold text-emerald-600 dark:text-emerald-400"
+                        title={`Actual agent work time per ticket. Calendar: ${product.averageResolutionTime?.toFixed(1) || 'N/A'}h | Active: ${product.avgActiveHours.toFixed(1)}h`}
+                      >
+                        {product.avgActiveHours.toFixed(1)}h
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500">N/A</span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-sm text-center text-slate-700 dark:text-slate-300">
                     {product.accessories && product.accessories.length > 0 ? (
@@ -699,6 +1052,7 @@ function ProductAnalytics({ data, accessories = [] }) {
                   <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Open</th>
                   <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Resolved</th>
                   <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg Resolution</th>
+                  <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg Active Time</th>
                 </tr>
               </thead>
               <tbody>
@@ -713,6 +1067,18 @@ function ProductAnalytics({ data, accessories = [] }) {
                       {accessory.averageResolutionTime > 0 
                         ? `${accessory.averageResolutionTime.toFixed(1)}h`
                         : 'N/A'}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-center">
+                      {accessory.avgActiveHours > 0 ? (
+                        <span 
+                          className="font-bold text-emerald-600 dark:text-emerald-400"
+                          title={`Actual agent work time per ticket. Calendar: ${accessory.averageResolutionTime?.toFixed(1) || 'N/A'}h | Active: ${accessory.avgActiveHours.toFixed(1)}h`}
+                        >
+                          {accessory.avgActiveHours.toFixed(1)}h
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 dark:text-slate-500">N/A</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -777,6 +1143,7 @@ function IssueAnalytics({ data }) {
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Open</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Resolved</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg Resolution</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg Active Time</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Products</th>
               </tr>
             </thead>
@@ -793,6 +1160,18 @@ function IssueAnalytics({ data }) {
                     {issue.averageResolutionTime > 0 
                       ? `${issue.averageResolutionTime.toFixed(1)}h`
                       : 'N/A'}
+                  </td>
+                  <td className="py-3 px-4 text-sm text-center">
+                    {issue.avgActiveHours !== undefined && issue.avgActiveHours >= 0 ? (
+                      <span 
+                        className="font-bold text-emerald-600 dark:text-emerald-400"
+                        title={`Actual agent work time per ticket. Calendar: ${issue.averageResolutionTime?.toFixed(1) || 'N/A'}h | Active: ${issue.avgActiveHours.toFixed(1)}h`}
+                      >
+                        {issue.avgActiveHours.toFixed(1)}h
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500">N/A</span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-sm text-center text-slate-700 dark:text-slate-300">
                     {issue.products && issue.products.length > 0 
@@ -868,6 +1247,7 @@ function TATReports({ data }) {
                 <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Assignee</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Status</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Resolution Time</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Active Time</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Priority</th>
               </tr>
             </thead>
@@ -892,9 +1272,27 @@ function TATReports({ data }) {
                     </span>
                   </td>
                   <td className="py-3 px-4 text-sm text-center">
-                    <span className="font-bold text-red-600 dark:text-red-400">
+                    <span 
+                      className="font-bold text-red-600 dark:text-red-400"
+                      title={ticket.activeTimeHours !== null && ticket.activeTimeHours !== undefined 
+                        ? `Calendar: ${ticket.resolutionTimeHours?.toFixed(1) || 'N/A'}h | Active: ${ticket.activeTimeHours.toFixed(1)}h`
+                        : `Calendar: ${ticket.resolutionTimeHours?.toFixed(1) || 'N/A'}h`
+                      }
+                    >
                       {ticket.resolutionTimeHours ? `${ticket.resolutionTimeHours.toFixed(1)}h` : 'N/A'}
                     </span>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-center">
+                    {ticket.activeTimeHours !== null && ticket.activeTimeHours !== undefined ? (
+                      <span 
+                        className="font-bold text-emerald-600 dark:text-emerald-400"
+                        title={`Calendar: ${ticket.resolutionTimeHours?.toFixed(1) || 'N/A'}h | Active: ${ticket.activeTimeHours.toFixed(1)}h`}
+                      >
+                        {ticket.activeTimeHours.toFixed(1)}h
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500">N/A</span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-sm text-center">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1039,6 +1437,14 @@ function DepartmentAnalytics({ data }) {
                 <span className="text-slate-600 dark:text-slate-400">Resolution Rate:</span>
                 <span className="font-bold text-slate-900 dark:text-white">{dept.resolutionRate}%</span>
               </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600 dark:text-slate-400">Avg Active:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  {dept.avgActiveHours > 0 
+                    ? `${dept.avgActiveHours.toFixed(1)}h`
+                    : 'N/A'}
+                </span>
+              </div>
             </div>
           </div>
         ))}
@@ -1057,6 +1463,7 @@ function DepartmentAnalytics({ data }) {
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Resolved</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg FRT</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg Resolution</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Avg Active Time</th>
                 <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Resolution Rate</th>
               </tr>
             </thead>
@@ -1075,6 +1482,18 @@ function DepartmentAnalytics({ data }) {
                   </td>
                   <td className="py-3 px-4 text-sm text-center text-slate-700 dark:text-slate-300">
                     {dept.averageResolutionTime > 0 ? `${dept.averageResolutionTime.toFixed(1)}h` : 'N/A'}
+                  </td>
+                  <td className="py-3 px-4 text-sm text-center">
+                    {dept.avgActiveHours > 0 ? (
+                      <span 
+                        className="font-bold text-emerald-600 dark:text-emerald-400"
+                        title={`Actual agent work time per ticket. Calendar: ${dept.averageResolutionTime?.toFixed(1) || 'N/A'}h | Active: ${dept.avgActiveHours.toFixed(1)}h`}
+                      >
+                        {dept.avgActiveHours.toFixed(1)}h
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500">N/A</span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-sm text-center">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1099,16 +1518,16 @@ function DepartmentAnalytics({ data }) {
 
 // CSAT Report Component
 function CSATReport({ data }) {
-  if (!data) {
-    return (
-      <div className="text-center py-12">
-        <Star className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-3" />
-        <p className="text-slate-500 dark:text-slate-400">No CSAT data available for the selected date range</p>
-      </div>
-    );
-  }
-
-  const { summary, agentMetrics, departmentMetrics, detailedFeedbacks } = data;
+  // Default values if data is not available
+  const summary = data?.summary || {
+    totalFeedbacks: 0,
+    averageRating: 0,
+    csatScore: 0,
+    ratingDistribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+  };
+  const agentMetrics = data?.agentMetrics || [];
+  const departmentMetrics = data?.departmentMetrics || [];
+  const recentFeedbacks = data?.recentFeedbacks || [];
 
   return (
     <div className="space-y-6">
@@ -1127,7 +1546,7 @@ function CSATReport({ data }) {
             <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <p className="text-2xl font-bold text-slate-900 dark:text-white">
-            {summary.averageRating.toFixed(2)}/5
+            {(summary?.averageRating || 0).toFixed(2)}/5
           </p>
         </div>
         <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-slate-700 dark:to-slate-800 rounded-xl p-4 border border-blue-200 dark:border-slate-600">
@@ -1135,7 +1554,7 @@ function CSATReport({ data }) {
             <span className="text-sm text-slate-600 dark:text-slate-400">CSAT Score</span>
             <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
           </div>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">{summary.csatScore}%</p>
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{summary?.csatScore || 0}%</p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">% of 4+ ratings</p>
         </div>
         <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-slate-700 dark:to-slate-800 rounded-xl p-4 border border-amber-200 dark:border-slate-600">
@@ -1143,10 +1562,10 @@ function CSATReport({ data }) {
             <span className="text-sm text-slate-600 dark:text-slate-400">5-Star Ratings</span>
             <Star className="w-5 h-5 text-amber-600 dark:text-amber-400" />
           </div>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">{summary.ratingDistribution[5]}</p>
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{summary?.ratingDistribution?.[5] || 0}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {summary.totalFeedbacks > 0 
-              ? Math.round((summary.ratingDistribution[5] / summary.totalFeedbacks) * 100) 
+            {(summary?.totalFeedbacks || 0) > 0 
+              ? Math.round(((summary?.ratingDistribution?.[5] || 0) / (summary?.totalFeedbacks || 1)) * 100) 
               : 0}% of total
           </p>
         </div>
@@ -1157,9 +1576,9 @@ function CSATReport({ data }) {
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Rating Distribution</h3>
         <div className="space-y-3">
           {[5, 4, 3, 2, 1].map(rating => {
-            const count = summary.ratingDistribution[rating];
-            const percentage = summary.totalFeedbacks > 0 
-              ? (count / summary.totalFeedbacks) * 100 
+            const count = summary?.ratingDistribution?.[rating] || 0;
+            const percentage = (summary?.totalFeedbacks || 0) > 0 
+              ? (count / (summary?.totalFeedbacks || 1)) * 100 
               : 0;
             return (
               <div key={rating} className="flex items-center gap-4">
@@ -1272,8 +1691,8 @@ function CSATReport({ data }) {
         </div>
       )}
 
-      {/* Detailed Feedbacks */}
-      {detailedFeedbacks && detailedFeedbacks.length > 0 && (
+      {/* Recent Feedbacks */}
+      {recentFeedbacks && recentFeedbacks.length > 0 && (
         <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Recent Feedbacks</h3>
           <div className="overflow-x-auto">
@@ -1290,7 +1709,7 @@ function CSATReport({ data }) {
                 </tr>
               </thead>
               <tbody>
-                {detailedFeedbacks.map((feedback, idx) => (
+                {recentFeedbacks.map((feedback, idx) => (
                   <tr key={idx} className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">
                     <td className="py-3 px-4 text-sm font-medium text-slate-900 dark:text-white">{feedback.ticketId}</td>
                     <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300 max-w-xs truncate" title={feedback.subject}>
@@ -1332,6 +1751,156 @@ function CSATReport({ data }) {
   );
 }
 
+// Callback Report Component
+function CallbackReport({ data, summary }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Phone className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto mb-3" />
+        <p className="text-slate-500 dark:text-slate-400">No callback data available for the selected date range</p>
+      </div>
+    );
+  }
+
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+      completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+      cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+      denied: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+      rescheduled: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+    };
+    return colors[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Status Distribution */}
+      {summary?.statusCounts && (
+        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Status Distribution</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {Object.entries(summary.statusCounts).map(([status, count]) => (
+              <div key={status} className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+                <div className="text-sm text-slate-600 dark:text-slate-400 capitalize mb-1">{status}</div>
+                <div className="text-2xl font-bold text-slate-900 dark:text-white">{count}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  {summary.totalCallbacks > 0 
+                    ? Math.round((count / summary.totalCallbacks) * 100) 
+                    : 0}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Agent Performance */}
+      {summary?.agentStats && summary.agentStats.length > 0 && (
+        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Agent Performance</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Agent</th>
+                  <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Total</th>
+                  <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Pending</th>
+                  <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Completed</th>
+                  <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Cancelled</th>
+                  <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Denied</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.agentStats.map((agent, idx) => (
+                  <tr key={idx} className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <td className="py-3 px-4 text-sm font-medium text-slate-900 dark:text-white">{agent.agentName}</td>
+                    <td className="py-3 px-4 text-sm text-center text-slate-700 dark:text-slate-300">{agent.total}</td>
+                    <td className="py-3 px-4 text-sm text-center text-slate-700 dark:text-slate-300">{agent.pending || 0}</td>
+                    <td className="py-3 px-4 text-sm text-center text-emerald-600 dark:text-emerald-400 font-medium">{agent.completed || 0}</td>
+                    <td className="py-3 px-4 text-sm text-center text-slate-700 dark:text-slate-300">{agent.cancelled || 0}</td>
+                    <td className="py-3 px-4 text-sm text-center text-slate-700 dark:text-slate-300">{agent.denied || 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Detailed Callbacks List */}
+      <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Callback Details</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700">
+                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Customer</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Phone</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Scheduled Time</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Agent</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((callback) => (
+                <tr key={callback.id} className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">
+                  <td className="py-3 px-4">
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">{callback.customerName}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{callback.customerEmail}</div>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300">
+                    {callback.countryCode} {callback.phoneNumber}
+                  </td>
+                  <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300">
+                    {formatDate(callback.scheduledTime)}
+                    {callback.rescheduledTime && (
+                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        Rescheduled: {formatDate(callback.rescheduledTime)}
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">{callback.agentName}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{callback.departmentName}</div>
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(callback.status)}`}>
+                      {callback.status?.charAt(0).toUpperCase() + callback.status?.slice(1) || 'N/A'}
+                    </span>
+                    {callback.denialReason && (
+                      <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        {callback.denialReason}
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300 max-w-xs truncate">
+                    {callback.notes || 'N/A'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// AI Analysis Modal Component
 function SummaryCard({ title, value, subtitle, gradient = 'from-slate-900 to-slate-800' }) {
   return (
     <div className={`rounded-2xl p-4 text-white bg-gradient-to-br ${gradient} shadow-lg`}>

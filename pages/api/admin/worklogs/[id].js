@@ -11,7 +11,7 @@ export default async function handler(req, res) {
       const worklog = await prisma.worklog.findUnique({
         where: { id },
         include: {
-          Agent: {
+          agent: {
             select: {
               id: true,
               name: true,
@@ -19,9 +19,9 @@ export default async function handler(req, res) {
               slug: true
             }
           },
-          Conversation: {
+          ticket: {
             select: {
-              id: true,
+              ticketNumber: true,
               subject: true,
               status: true,
               priority: true
@@ -48,6 +48,8 @@ export default async function handler(req, res) {
         success: true,
         worklog: {
           ...worklog,
+          Agent: worklog.agent, // Legacy compatibility
+          Conversation: worklog.ticket, // Legacy compatibility
           durationSeconds: duration,
           durationFormatted: formatDuration(duration)
         }
@@ -64,7 +66,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     try {
-      const { endedAt, description, startedAt } = req.body;
+      const { endedAt, startedAt, stopReason, isSystemAuto } = req.body;
 
       const worklog = await prisma.worklog.findUnique({
         where: { id }
@@ -83,21 +85,32 @@ export default async function handler(req, res) {
         updateData.endedAt = endedAt ? new Date(endedAt) : null;
       }
       
-      if (description !== undefined) {
-        updateData.description = description;
-      }
-      
       if (startedAt !== undefined) {
         updateData.startedAt = new Date(startedAt);
       }
 
-      // Recalculate duration if end time is set
-      if (updateData.endedAt !== undefined) {
+      if (stopReason !== undefined) {
+        updateData.stopReason = stopReason;
+      }
+
+      if (isSystemAuto !== undefined) {
+        updateData.isSystemAuto = isSystemAuto;
+      }
+
+      // Recalculate duration if start or end time changes
+      if (updateData.endedAt !== undefined || updateData.startedAt !== undefined) {
         const startTime = updateData.startedAt ? new Date(updateData.startedAt) : new Date(worklog.startedAt);
-        const endTime = updateData.endedAt || new Date();
+        const endTime = updateData.endedAt !== undefined 
+          ? (updateData.endedAt ? new Date(updateData.endedAt) : null)
+          : worklog.endedAt;
         
-        if (endTime >= startTime) {
-          updateData.durationSeconds = Math.floor((endTime - startTime) / 1000);
+        if (endTime) {
+          if (endTime >= startTime) {
+            updateData.durationSeconds = Math.floor((endTime - startTime) / 1000);
+          }
+        } else {
+          // If endedAt is set to null (active), reset durationSeconds to 0
+          updateData.durationSeconds = 0;
         }
       }
 
@@ -105,7 +118,7 @@ export default async function handler(req, res) {
         where: { id },
         data: updateData,
         include: {
-          Agent: {
+          agent: {
             select: {
               id: true,
               name: true,
@@ -113,9 +126,9 @@ export default async function handler(req, res) {
               slug: true
             }
           },
-          Conversation: {
+          ticket: {
             select: {
-              id: true,
+              ticketNumber: true,
               subject: true,
               status: true,
               priority: true
@@ -125,12 +138,14 @@ export default async function handler(req, res) {
       });
 
       // Update TAT metrics for the conversation
-      await updateTATMetrics(prisma, updatedWorklog.conversationId);
+      await updateTATMetrics(prisma, updatedWorklog.ticketNumber);
 
       return res.status(200).json({
         success: true,
         worklog: {
           ...updatedWorklog,
+          Agent: updatedWorklog.agent, // Legacy compatibility
+          Conversation: updatedWorklog.ticket, // Legacy compatibility
           durationFormatted: updatedWorklog.durationSeconds 
             ? formatDuration(updatedWorklog.durationSeconds) 
             : (updatedWorklog.endedAt ? '0s' : 'Active')
@@ -159,12 +174,15 @@ export default async function handler(req, res) {
         });
       }
 
+      // Store ticketNumber before deletion
+      const ticketNumber = worklog.ticketNumber;
+
       const deletedWorklog = await prisma.worklog.delete({
         where: { id }
       });
 
       // Update TAT metrics for the conversation
-      await updateTATMetrics(prisma, deletedWorklog.conversationId);
+      await updateTATMetrics(prisma, ticketNumber);
 
       return res.status(200).json({
         success: true,
@@ -198,4 +216,5 @@ function formatDuration(seconds) {
     return `${secs}s`;
   }
 }
+
 

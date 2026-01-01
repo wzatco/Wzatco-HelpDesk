@@ -1,8 +1,9 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma, { ensurePrismaConnected } from '../../../../../lib/prisma';
 
 export default async function handler(req, res) {
+  // Ensure Prisma is connected before proceeding
+  await ensurePrismaConnected();
+
   const { customerId } = req.query;
 
   if (req.method !== 'GET') {
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
         createdAt: 'desc'
       },
       select: {
-        id: true,
+        ticketNumber: true,
         subject: true,
         status: true,
         priority: true,
@@ -43,8 +44,6 @@ export default async function handler(req, res) {
       message: 'Internal server error',
       error: error.message
     });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

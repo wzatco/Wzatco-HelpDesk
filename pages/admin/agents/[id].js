@@ -85,16 +85,20 @@ export default function AgentProfilePage() {
   const fetchAgentDetails = async () => {
     try {
       setLoading(true);
+      console.log('🔍 Frontend: Fetching agent with identifier:', id);
       // Fetch agent by slug (or id for backward compatibility)
       const response = await fetch(`/api/admin/agents/${id}`);
       const data = await response.json();
-      
+
+      console.log('📥 Frontend: API response:', { ok: response.ok, hasAgent: !!data.agent, error: data.message, availableAgents: data.availableAgents });
+
       if (response.ok && data.agent) {
         setAgent(data.agent);
         fetchAgentTickets(data.agent.id);
         fetchAgentAnalytics(data.agent.id);
         fetchAgentWorklogs(data.agent.id);
       } else {
+        console.error('❌ Frontend: Agent not found. Response:', data);
         setAgent(null);
       }
     } catch (error) {
@@ -106,12 +110,16 @@ export default function AgentProfilePage() {
 
   const fetchAgentTickets = async (agentId) => {
     try {
-      // Use agentId parameter for proper filtering
-      const response = await fetch(`/api/admin/tickets?agentId=${agentId}&limit=100`);
+      // Use agentId parameter for proper filtering, showAll=true to include resolved/closed
+      const response = await fetch(`/api/admin/tickets?agentId=${agentId}&limit=100&showAll=true`);
       const data = await response.json();
-      
+
+
       if (response.ok) {
+        console.log('📊 Tickets fetched:', data.tickets?.length || 0, 'tickets');
         setTickets(data.tickets || []);
+      } else {
+        console.error('❌ Failed to fetch tickets:', data);
       }
     } catch (error) {
       console.error('Error fetching agent tickets:', error);
@@ -122,9 +130,12 @@ export default function AgentProfilePage() {
     try {
       const response = await fetch(`/api/admin/agents/${agentId}/analytics`);
       const data = await response.json();
-      
+
       if (response.ok) {
+        console.log('📈 Analytics data:', data);
         setAnalyticsData(data);
+      } else {
+        console.error('❌ Analytics fetch failed:', data);
       }
     } catch (error) {
       console.error('Error fetching agent analytics:', error);
@@ -138,15 +149,15 @@ export default function AgentProfilePage() {
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 30);
-      
+
       const response = await fetch(
         `/api/admin/worklogs?agentId=${agentId}&startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`
       );
       const data = await response.json();
-      
+
       if (response.ok) {
         const worklogs = data.worklogs || [];
-        
+
         // Calculate summary
         const totalSeconds = worklogs.reduce((sum, w) => {
           if (w.durationSeconds) {
@@ -157,19 +168,20 @@ export default function AgentProfilePage() {
           }
           return sum;
         }, 0);
-        
+
         const totalHours = Math.floor(totalSeconds / 3600);
         const totalMinutes = Math.floor((totalSeconds % 3600) / 60);
-        
-        const autoWorklogs = worklogs.filter(w => w.source === 'auto').length;
-        const manualWorklogs = worklogs.filter(w => w.source === 'manual').length;
-        
-        // Calculate average per ticket
-        const uniqueTickets = new Set(worklogs.map(w => w.conversationId)).size;
+
+        // Handle both new schema (ticketNumber) and legacy (conversationId) for backward compatibility
+        const autoWorklogs = worklogs.filter(w => w.isSystemAuto === true || w.source === 'auto').length;
+        const manualWorklogs = worklogs.filter(w => w.isSystemAuto === false || w.source === 'manual').length;
+
+        // Calculate average per ticket - use ticketNumber or fallback to conversationId
+        const uniqueTickets = new Set(worklogs.map(w => w.ticketNumber || w.conversationId || (w.ticket?.ticketNumber) || (w.Conversation?.ticketNumber))).size;
         const avgPerTicket = uniqueTickets > 0 ? Math.floor(totalSeconds / uniqueTickets) : 0;
         const avgHours = Math.floor(avgPerTicket / 3600);
         const avgMinutes = Math.floor((avgPerTicket % 3600) / 60);
-        
+
         setWorklogSummary({
           totalWorklogs: worklogs.length,
           totalHours,
@@ -241,26 +253,31 @@ export default function AgentProfilePage() {
     else if (ticket.status === 'pending') acc.pending++;
     else if (ticket.status === 'resolved') acc.resolved++;
     else if (ticket.status === 'closed') acc.closed++;
-    
-    if (ticket.priority === 'high') acc.high++;
-    else if (ticket.priority === 'medium') acc.medium++;
+
+    // Only count high priority tickets that are NOT resolved or closed
+    if (ticket.priority === 'high' && ticket.status !== 'resolved' && ticket.status !== 'closed') {
+      acc.high++;
+    }
+    if (ticket.priority === 'medium') acc.medium++;
     else if (ticket.priority === 'low') acc.low++;
-    
+
     return acc;
   }, { total: 0, open: 0, pending: 0, resolved: 0, closed: 0, high: 0, medium: 0, low: 0 });
 
-  const resolutionRate = tickets.length > 0 
-    ? Math.round((ticketStats.resolved + ticketStats.closed) / tickets.length * 100)
+  // Use performance data from agent API instead of recalculating
+  const resolvedCount = agent?.performance?.ticketsResolved || ticketStats.resolved + ticketStats.closed;
+  const resolutionRate = agent?.ticketCount > 0
+    ? Math.round((resolvedCount / agent.ticketCount) * 100)
     : 0;
 
-  // Calculate recent activity (last 7 days)
+  // Calculate recent activity (last 7 days) - tickets with recent updates
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const recentTickets = tickets.filter(t => new Date(t.createdAt) > sevenDaysAgo).length;
+  const recentTickets = tickets.filter(t => new Date(t.updatedAt || t.createdAt) > sevenDaysAgo).length;
 
   // Use real performance trend data from analytics
   const performanceTrendData = analyticsData?.weeklyPerformance || [0, 0, 0, 0];
-  
+
   // Use real daily ticket data from analytics
   const dailyTicketData = analyticsData?.dailyTickets || [];
 
@@ -332,7 +349,7 @@ export default function AgentProfilePage() {
                   <div className="flex-1 text-white">
                     <div className="flex items-center gap-3 mb-2 flex-wrap">
                       <h1 className="text-3xl font-bold">{agent.name}</h1>
-                      {agent.status === 'online' ? (
+                      {agent.isOnline ? (
                         <div className="flex items-center gap-1.5">
                           <div className="w-3 h-3 bg-green-300 rounded-full animate-pulse shadow-lg shadow-green-300/50"></div>
                           <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
@@ -350,10 +367,10 @@ export default function AgentProfilePage() {
                         <Mail className="w-4 h-4" />
                         <span>{agent.email || 'No email'}</span>
                       </div>
-                      {agent.userId && (
+                      {(agent.userId || agent.slug) && (
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4" />
-                          <span>ID: {agent.userId}</span>
+                          <span>Agent ID: {agent.userId || agent.slug}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
@@ -388,7 +405,7 @@ export default function AgentProfilePage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">Resolved</p>
-                      <p className="text-3xl font-bold text-slate-900 dark:text-white">{agent.performance?.ticketsResolved || 0}</p>
+                      <p className="text-3xl font-bold text-slate-900 dark:text-white">{resolvedCount}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{resolutionRate}% resolution rate</p>
                     </div>
                     <div className="p-3 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl shadow-lg">
@@ -487,11 +504,10 @@ export default function AgentProfilePage() {
                 <div className="flex border-b border-white/20">
                   <button
                     onClick={() => setActiveTab('tickets')}
-                    className={`flex-1 px-6 py-4 text-left font-semibold transition-all duration-200 ${
-                      activeTab === 'tickets'
-                        ? 'bg-white/20 text-white border-b-2 border-white'
-                        : 'text-white/70 hover:text-white hover:bg-white/10'
-                    }`}
+                    className={`flex-1 px-6 py-4 text-left font-semibold transition-all duration-200 ${activeTab === 'tickets'
+                      ? 'bg-white/20 text-white border-b-2 border-white'
+                      : 'text-white/70 hover:text-white hover:bg-white/10'
+                      }`}
                   >
                     <div className="flex items-center gap-2">
                       <TicketIcon className="w-5 h-5" />
@@ -503,11 +519,10 @@ export default function AgentProfilePage() {
                   </button>
                   <button
                     onClick={() => setActiveTab('analytics')}
-                    className={`flex-1 px-6 py-4 text-left font-semibold transition-all duration-200 ${
-                      activeTab === 'analytics'
-                        ? 'bg-white/20 text-white border-b-2 border-white'
-                        : 'text-white/70 hover:text-white hover:bg-white/10'
-                    }`}
+                    className={`flex-1 px-6 py-4 text-left font-semibold transition-all duration-200 ${activeTab === 'analytics'
+                      ? 'bg-white/20 text-white border-b-2 border-white'
+                      : 'text-white/70 hover:text-white hover:bg-white/10'
+                      }`}
                   >
                     <div className="flex items-center gap-2">
                       <BarChart3 className="w-5 h-5" />
@@ -533,7 +548,7 @@ export default function AgentProfilePage() {
                       </div>
                       <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
                         <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">Resolved</p>
-                        <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{ticketStats.resolved}</p>
+                        <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{resolvedCount}</p>
                       </div>
                       <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
                         <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">Closed</p>
@@ -569,7 +584,7 @@ export default function AgentProfilePage() {
                       ) : (
                         <div className="space-y-4">
                           {tickets.map((ticket, index) => (
-                            <Link key={ticket.id} href={`/admin/tickets/${ticket.id}`}>
+                            <Link key={ticket.id} href={`/admin/tickets/${ticket.ticketNumber || ticket.id}`}>
                               <div className="p-5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-violet-300 dark:hover:border-violet-600 hover:shadow-lg transition-all cursor-pointer group">
                                 <div className="flex items-start justify-between gap-4">
                                   <div className="flex-1 min-w-0">
@@ -648,8 +663,8 @@ export default function AgentProfilePage() {
                       <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
                         <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-2">Presence Status</p>
                         <div className="flex items-center gap-2">
-                          <AgentPresenceIndicator 
-                            presenceStatus={agent.presenceStatus || agent.status || 'offline'} 
+                          <AgentPresenceIndicator
+                            presenceStatus={agent.isOnline ? 'online' : (agent.presenceStatus || agent.status || 'offline')}
                             showLabel={false}
                             size="default"
                           />
@@ -726,8 +741,8 @@ export default function AgentProfilePage() {
                               </div>
                               <p className="text-4xl font-extrabold text-slate-900 dark:text-white mb-3">{resolutionRate}%</p>
                               <div className="mt-4 bg-slate-200/80 dark:bg-slate-700/80 rounded-full h-3 overflow-hidden">
-                                <div 
-                                  className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-3 rounded-full transition-all duration-700 shadow-lg shadow-emerald-500/50" 
+                                <div
+                                  className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-3 rounded-full transition-all duration-700 shadow-lg shadow-emerald-500/50"
                                   style={{ width: `${resolutionRate}%` }}
                                 ></div>
                               </div>
@@ -747,13 +762,12 @@ export default function AgentProfilePage() {
                               </div>
                               <p className="text-4xl font-extrabold text-slate-900 dark:text-white mb-3">{agent.performance?.avgResponseTime || 0}m</p>
                               <div className="flex items-center gap-2">
-                                <Badge className={`${
-                                  agent.performance?.avgResponseTime < 30 
-                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700' 
-                                    : agent.performance?.avgResponseTime < 60 
+                                <Badge className={`${agent.performance?.avgResponseTime < 30
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700'
+                                  : agent.performance?.avgResponseTime < 60
                                     ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
                                     : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700'
-                                } border font-semibold`}>
+                                  } border font-semibold`}>
                                   {agent.performance?.avgResponseTime < 30 ? 'Excellent' : agent.performance?.avgResponseTime < 60 ? 'Good' : 'Needs Improvement'}
                                 </Badge>
                               </div>
@@ -776,11 +790,10 @@ export default function AgentProfilePage() {
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <Star
                                     key={star}
-                                    className={`w-5 h-5 transition-all ${
-                                      star <= Math.round(parseFloat(agent.performance?.customerRating || 0))
-                                        ? 'text-amber-500 fill-amber-500 dark:text-amber-400 dark:fill-amber-400'
-                                        : 'text-slate-300 dark:text-slate-600'
-                                    }`}
+                                    className={`w-5 h-5 transition-all ${star <= Math.round(parseFloat(agent.performance?.customerRating || 0))
+                                      ? 'text-amber-500 fill-amber-500 dark:text-amber-400 dark:fill-amber-400'
+                                      : 'text-slate-300 dark:text-slate-600'
+                                      }`}
                                   />
                                 ))}
                               </div>
@@ -801,7 +814,7 @@ export default function AgentProfilePage() {
                           <p className="text-sm text-slate-500 dark:text-slate-400">Last 30 days worklog statistics</p>
                         </div>
                       </div>
-                      
+
                       {loadingWorklogs ? (
                         <Card className="border-0 shadow-xl dark:bg-slate-800 bg-white rounded-2xl">
                           <CardContent className="p-8">
@@ -945,27 +958,28 @@ export default function AgentProfilePage() {
                                       if (total === 0) return null;
                                       const openPercent = (ticketStats.open / total) * 100;
                                       const pendingPercent = (ticketStats.pending / total) * 100;
-                                      const resolvedPercent = (ticketStats.resolved / total) * 100;
-                                      const closedPercent = (ticketStats.closed / total) * 100;
-                                      
+                                      // Use resolvedCount from agent.performance which is the authoritative source
+                                      const resolvedPercent = (resolvedCount / total) * 100;
+                                      const closedPercent = 0; // Already included in resolvedCount
+
                                       let currentPercent = 0;
                                       const getPath = (percent) => {
                                         const startAngle = (currentPercent / 100) * 360;
                                         const endAngle = ((currentPercent + percent) / 100) * 360;
                                         currentPercent += percent;
-                                        
+
                                         const startAngleRad = (startAngle * Math.PI) / 180;
                                         const endAngleRad = (endAngle * Math.PI) / 180;
-                                        
+
                                         const x1 = 100 + 85 * Math.cos(startAngleRad);
                                         const y1 = 100 + 85 * Math.sin(startAngleRad);
                                         const x2 = 100 + 85 * Math.cos(endAngleRad);
                                         const y2 = 100 + 85 * Math.sin(endAngleRad);
-                                        
+
                                         const largeArcFlag = percent > 50 ? 1 : 0;
                                         return `M 100 100 L ${x1} ${y1} A 85 85 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
                                       };
-                                      
+
                                       return (
                                         <>
                                           {openPercent > 0 && (
@@ -1016,14 +1030,13 @@ export default function AgentProfilePage() {
                                     </div>
                                   </div>
                                 </div>
-                                
+
                                 {/* Enhanced Legend */}
                                 <div className="w-full space-y-3">
                                   {[
                                     { label: 'Open', value: ticketStats.open, colorClass: 'bg-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-200 dark:border-yellow-800', text: 'text-yellow-700 dark:text-yellow-300' },
                                     { label: 'Pending', value: ticketStats.pending, colorClass: 'bg-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800', text: 'text-blue-700 dark:text-blue-300' },
-                                    { label: 'Resolved', value: ticketStats.resolved, colorClass: 'bg-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-700 dark:text-emerald-300' },
-                                    { label: 'Closed', value: ticketStats.closed, colorClass: 'bg-green-500', bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-200 dark:border-green-800', text: 'text-green-700 dark:text-green-300' }
+                                    { label: 'Resolved', value: resolvedCount, colorClass: 'bg-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-700 dark:text-emerald-300' }
                                   ].map((item, idx) => (
                                     <div key={idx} className={`flex items-center justify-between p-4 ${item.bg} ${item.border} border-2 rounded-xl hover:shadow-md transition-all duration-200`}>
                                       <div className="flex items-center gap-3">
@@ -1053,9 +1066,9 @@ export default function AgentProfilePage() {
                             </div>
                           </div>
                           <CardContent className="p-8">
-                            <div className="h-72 flex items-end justify-between gap-2 pb-12">
+                            <div className="h-80 flex flex-col justify-end gap-4">
                               {(() => {
-                                const dayData = dailyTicketData.length > 0 ? dailyTicketData : 
+                                const dayData = dailyTicketData.length > 0 ? dailyTicketData :
                                   (() => {
                                     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                                     const today = new Date();
@@ -1069,32 +1082,36 @@ export default function AgentProfilePage() {
                                       return { day, count: dayTickets };
                                     });
                                   })();
-                                
+
                                 const maxHeight = Math.max(...dayData.map(d => d.count), 1);
-                                
-                                return dayData.map((data, index) => {
-                                  const height = maxHeight > 0 ? (data.count / maxHeight) * 100 : 0;
-                                  return (
-                                    <div key={index} className="flex-1 flex flex-col items-center gap-2 group">
-                                      <div className="w-full flex items-end justify-center relative" style={{ height: '220px' }}>
-                                        <div
-                                          className="w-full bg-gradient-to-t from-violet-500 via-purple-500 to-purple-600 rounded-t-xl transition-all duration-500 hover:from-violet-600 hover:via-purple-600 hover:to-purple-700 shadow-lg hover:shadow-xl group-hover:scale-105"
-                                          style={{ height: `${height}%`, minHeight: data.count > 0 ? '12px' : '0' }}
-                                          title={`${data.count} tickets on ${data.day}`}
-                                        ></div>
-                                        {data.count > 0 && (
-                                          <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 dark:bg-slate-700 text-white text-xs font-bold px-2 py-1 rounded whitespace-nowrap">
-                                            {data.count} {data.count === 1 ? 'ticket' : 'tickets'}
+
+                                return (
+                                  <div className="flex items-end justify-between gap-2 h-full">
+                                    {dayData.map((data, index) => {
+                                      const height = maxHeight > 0 ? (data.count / maxHeight) * 85 : 0;
+                                      return (
+                                        <div key={index} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
+                                          <div className="w-full flex items-end justify-center relative" style={{ height: `${height}%`, maxHeight: '240px' }}>
+                                            <div
+                                              className="w-full h-full bg-gradient-to-t from-violet-500 via-purple-500 to-purple-600 rounded-t-xl transition-all duration-500 hover:from-violet-600 hover:via-purple-600 hover:to-purple-700 shadow-lg hover:shadow-xl group-hover:scale-105"
+                                              title={`${data.count} tickets on ${data.day}`}
+                                              style={{ minHeight: data.count > 0 ? '12px' : '0' }}
+                                            ></div>
+                                            {data.count > 0 && (
+                                              <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 dark:bg-slate-700 text-white text-xs font-bold px-2 py-1 rounded whitespace-nowrap z-10">
+                                                {data.count} {data.count === 1 ? 'ticket' : 'tickets'}
+                                              </div>
+                                            )}
                                           </div>
-                                        )}
-                                      </div>
-                                      <div className="text-center space-y-0.5 mt-2">
-                                        <span className="block text-sm font-bold text-slate-700 dark:text-slate-300">{data.day}</span>
-                                        <span className="block text-lg font-extrabold text-violet-600 dark:text-violet-400">{data.count}</span>
-                                      </div>
-                                    </div>
-                                  );
-                                });
+                                          <div className="text-center space-y-0.5 mt-2">
+                                            <span className="block text-sm font-bold text-slate-700 dark:text-slate-300">{data.day}</span>
+                                            <span className="block text-lg font-extrabold text-violet-600 dark:text-violet-400">{data.count}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
                               })()}
                             </div>
                           </CardContent>
@@ -1103,153 +1120,68 @@ export default function AgentProfilePage() {
 
                       {/* Second Row of Charts */}
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Performance Trend - Enhanced Line Chart */}
+                        {/* Weekly Resolved Tickets - Bar Chart */}
                         <Card className="border-0 shadow-xl dark:bg-slate-800 bg-white rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-300">
-                          <div className="bg-gradient-to-r from-violet-500 to-purple-600 dark:from-violet-600 dark:to-purple-700 px-6 py-4">
+                          <div className="bg-gradient-to-r from-emerald-500 to-green-600 dark:from-emerald-600 dark:to-green-700 px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <LineChart className="w-5 h-5 text-white" />
-                              <h4 className="text-lg font-bold text-white">Performance Trend (4 Weeks)</h4>
+                              <BarChart3 className="w-5 h-5 text-white" />
+                              <h4 className="text-lg font-bold text-white">Weekly Resolved Tickets (Last 4 Weeks)</h4>
                             </div>
                           </div>
                           <CardContent className="p-8">
-                            <div className="h-80 relative">
-                              {(!performanceTrendData || performanceTrendData.every(v => v === 0)) ? (
+                            <div className="h-80 flex flex-col justify-end gap-4">
+                              {(!analyticsData?.weeklyResolved || analyticsData.weeklyResolved.length === 0) ? (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                                   <div className="p-4 bg-slate-100 dark:bg-slate-700 rounded-full mb-4">
-                                    <LineChart className="w-12 h-12 text-slate-400 dark:text-slate-500" />
+                                    <BarChart3 className="w-12 h-12 text-slate-400 dark:text-slate-500" />
                                   </div>
-                                  <p className="text-base font-semibold text-slate-600 dark:text-slate-400">No performance data</p>
-                                  <p className="text-sm text-slate-500 dark:text-slate-500 mt-1">Data will appear as performance is tracked</p>
+                                  <p className="text-base font-semibold text-slate-600 dark:text-slate-400">No resolved tickets data</p>
+                                  <p className="text-sm text-slate-500 dark:text-slate-500 mt-1">Data will appear as tickets are resolved</p>
                                 </div>
                               ) : (
                                 <>
-                                  <svg width="100%" height="100%" className="absolute inset-0" style={{ padding: '1.5rem 2.5rem 3rem 2.5rem' }}>
-                                    {/* Grid lines */}
-                                    {[0, 25, 50, 75, 100].map((y) => (
-                                      <line
-                                        key={y}
-                                        x1="0%"
-                                        y1={`${y}%`}
-                                        x2="100%"
-                                        y2={`${y}%`}
-                                        stroke="currentColor"
-                                        strokeWidth="1.5"
-                                        strokeDasharray="4 4"
-                                        className="text-slate-200 dark:text-slate-700"
-                                      />
-                                    ))}
-                                    
-                                    {/* Area under line */}
-                                    <polygon
-                                      points={(() => {
-                                        const svgWidth = 100;
-                                        const svgHeight = 100;
-                                        const step = svgWidth / Math.max(performanceTrendData.length - 1, 1);
-                                        
-                                        let points = `0,${svgHeight} `;
-                                        points += performanceTrendData.map((value, index) => {
-                                          const x = index * step;
-                                          const y = svgHeight - (Math.max(0, Math.min(100, value)) / 100) * svgHeight;
-                                          return `${x},${y}`;
-                                        }).join(' ');
-                                        points += ` ${svgWidth},${svgHeight}`;
-                                        return points;
-                                      })()}
-                                      fill="url(#performanceGradient)"
-                                      fillOpacity="0.15"
-                                      className="transition-all duration-700"
-                                    />
-                                    
-                                    {/* Gradient definition */}
-                                    <defs>
-                                      <linearGradient id="performanceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                        <stop offset="0%" stopColor="#8b5cf6" />
-                                        <stop offset="50%" stopColor="#a855f7" />
-                                        <stop offset="100%" stopColor="#c084fc" />
-                                      </linearGradient>
-                                    </defs>
-                                    
-                                    {/* Performance line */}
-                                    <polyline
-                                      points={(() => {
-                                        const svgWidth = 100;
-                                        const svgHeight = 100;
-                                        const step = svgWidth / Math.max(performanceTrendData.length - 1, 1);
-                                        
-                                        return performanceTrendData.map((value, index) => {
-                                          const x = index * step;
-                                          const y = svgHeight - (Math.max(0, Math.min(100, value)) / 100) * svgHeight;
-                                          return `${x},${y}`;
-                                        }).join(' ');
-                                      })()}
-                                      fill="none"
-                                      stroke="url(#performanceGradient)"
-                                      strokeWidth="4"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      className="transition-all duration-700"
-                                    />
-                                    
-                                    {/* Data points with glow */}
-                                    {performanceTrendData.map((value, index) => {
-                                      const svgWidth = 100;
-                                      const svgHeight = 100;
-                                      const step = svgWidth / Math.max(performanceTrendData.length - 1, 1);
-                                      const x = index * step;
-                                      const y = svgHeight - (Math.max(0, Math.min(100, value)) / 100) * svgHeight;
-                                      return (
-                                        <g key={index}>
-                                          <circle
-                                            cx={`${x}%`}
-                                            cy={`${y}%`}
-                                            r="6"
-                                            fill="#fff"
-                                            stroke="#8b5cf6"
-                                            strokeWidth="3"
-                                            className="transition-all duration-300 hover:r-8"
-                                          />
-                                          <circle
-                                            cx={`${x}%`}
-                                            cy={`${y}%`}
-                                            r="6"
-                                            fill="#8b5cf6"
-                                            opacity="0.3"
-                                          />
-                                        </g>
-                                      );
-                                    })}
-                                  </svg>
-                                  
-                                  {/* X-axis labels */}
-                                  <div className="absolute bottom-0 left-10 right-10 flex justify-between">
-                                    {analyticsData?.weeklyResolved?.map((week, index) => (
-                                      <div key={index} className="text-center" title={week.period}>
-                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{week.week}</span>
+                                  {(() => {
+                                    const weekData = analyticsData.weeklyResolved;
+                                    const maxResolved = Math.max(...weekData.map(w => w.resolved), 1);
+
+                                    return (
+                                      <div className="flex items-end justify-between gap-2 h-full">
+                                        {weekData.map((week, index) => {
+                                          const height = maxResolved > 0 ? (week.resolved / maxResolved) * 85 : 0;
+                                          return (
+                                            <div key={index} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
+                                              <div className="w-full flex items-end justify-center relative" style={{ height: `${height}%`, maxHeight: '240px' }}>
+                                                <div
+                                                  className="w-full h-full bg-gradient-to-t from-emerald-500 via-green-500 to-green-600 rounded-t-xl transition-all duration-500 hover:from-emerald-600 hover:via-green-600 hover:to-green-700 shadow-lg hover:shadow-xl group-hover:scale-105"
+                                                  title={`${week.resolved} tickets resolved in ${week.week}`}
+                                                  style={{ minHeight: week.resolved > 0 ? '12px' : '0' }}
+                                                ></div>
+                                                {week.resolved > 0 && (
+                                                  <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 dark:bg-slate-700 text-white text-xs font-bold px-2 py-1 rounded whitespace-nowrap z-10">
+                                                    {week.resolved} {week.resolved === 1 ? 'ticket' : 'tickets'}
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="text-center space-y-0.5 mt-2">
+                                                <span className="block text-sm font-bold text-slate-700 dark:text-slate-300">{week.week}</span>
+                                                <span className="block text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{week.resolved}</span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
                                       </div>
-                                    )) || ['Week 1', 'Week 2', 'Week 3', 'Week 4'].map((label, index) => (
-                                      <span key={index} className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                                        {label}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  
-                                  {/* Y-axis labels */}
-                                  <div className="absolute left-0 top-6 bottom-12 flex flex-col justify-between">
-                                    {[100, 75, 50, 25, 0].map((value) => (
-                                      <span key={value} className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                                        {value}%
-                                      </span>
-                                    ))}
-                                  </div>
+                                    );
+                                  })()}
                                 </>
                               )}
                             </div>
                             <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
                               <div className="flex items-center justify-center gap-2">
-                                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-violet-500 to-purple-600 shadow-sm"></div>
-                                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Performance Score</span>
+                                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 shadow-sm"></div>
+                                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Resolved Tickets</span>
                               </div>
                             </div>
+
                           </CardContent>
                         </Card>
 
@@ -1376,7 +1308,7 @@ export default function AgentProfilePage() {
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Total tickets assigned</p>
                               </div>
                             </div>
-                            
+
                             <div className="flex items-center gap-4 p-5 bg-gradient-to-r from-emerald-50 to-emerald-100/50 dark:from-emerald-900/30 dark:to-emerald-900/20 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800 hover:shadow-lg transition-all duration-300">
                               <div className="p-3 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-lg">
                                 <CheckCircle2 className="w-6 h-6 text-white" />
@@ -1387,7 +1319,7 @@ export default function AgentProfilePage() {
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{resolutionRate}% resolution rate</p>
                               </div>
                             </div>
-                            
+
                             <div className="flex items-center gap-4 p-5 bg-gradient-to-r from-violet-50 to-violet-100/50 dark:from-violet-900/30 dark:to-violet-900/20 rounded-2xl border-2 border-violet-200 dark:border-violet-800 hover:shadow-lg transition-all duration-300">
                               <div className="p-3 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl shadow-lg">
                                 <Timer className="w-6 h-6 text-white" />
@@ -1398,7 +1330,7 @@ export default function AgentProfilePage() {
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Average first response</p>
                               </div>
                             </div>
-                            
+
                             <div className="flex items-center gap-4 p-5 bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-900/30 dark:to-amber-900/20 rounded-2xl border-2 border-amber-200 dark:border-amber-800 hover:shadow-lg transition-all duration-300">
                               <div className="p-3 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg">
                                 <Star className="w-6 h-6 text-white fill-white" />

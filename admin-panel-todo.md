@@ -27,17 +27,9 @@ Note: Tick items as completed. Dates/owners are placeholders – adjust as neede
 - [x] Filter by Agents
 - [x] Saved filters (create/update/delete)
 - [x] Export current result set (Excel/CSV)
-
-## Phase 3 — Live Chat Enhancements
-- [x] Agent presence: online/away/busy/offline/on leave/In meeting/DND (socket)
-- [ ] Queue overview (department-wise)
-- [ ] Customer wait timer if no agent available
-- [ ] Wait time estimate heuristic (v1)
 - [ ] Concurrency alert: multiple agents viewing same ticket
 - [ ] View Ticket option for other agents even if the ticket is opened by an agent
 - [ ] If an agent view the ticket which is opened by another agent, add an option to leave the note with options private/public (Public means other agents can see that note [Not the customers])
-- [ ] AI: predicted wait time (v2)
-- [ ] AI: auto-tagging and suggested replies (v2)
 
 ## Phase 4 — Analytics & Reporting
 - [x] Product-wise analytics (issues, resolution time)
@@ -135,17 +127,6 @@ Note: Tick items as completed. Dates/owners are placeholders – adjust as neede
 
 ---
 
-## Milestones & Targets
-- Phase 1 target: ____ / Owner: ____
-- Phase 2 target: ____ / Owner: ____
-- Phase 3 target: ____ / Owner: ____
-- Phase 4 target: ____ / Owner: ____
-- Phase 5 target: ____ / Owner: ____
-- Phase 6 target: ____ / Owner: ____
-- Phase 7 target: ____ / Owner: ____
-- Phase 8 target: ____ / Owner: ____
-- Phase 9 target: ____ / Owner: ____
-
 ## Backlog (Nice-to-have)
 - [x] Mobile app shell (read-only dashboards)
 - [x] Dark mode
@@ -154,3 +135,29 @@ Note: Tick items as completed. Dates/owners are placeholders – adjust as neede
 
 ## Important Tasks
 - [ ] On the landing page we have to display KB with proper categories, and proper details.
+
+---
+
+## Phase 11 — New Feature Requests
+
+### Ticket Management Enhancements
+- [ ] Hide Resolved and Closed tickets from default ticket views (add toggle to show/hide)
+- [ ] Remove "Urgent" priority option for customers (keep only Low, Medium, High)
+- [ ] Add Escalate button for agents/admins with priority and reason options (Priority must update in DB)
+- [ ] Allow customers to Close their own tickets
+- [ ] Ticket Reopen with Category and Reason fields
+
+### Knowledge Base & Articles
+- [ ] Admin approval workflow for articles created by agents
+- [ ] Article review/approval queue for admins
+
+### Reporting & Analytics
+- [ ] AI Analysis for reports (insights, trends, recommendations)
+- [ ] Fix SLA Reports (bugs and accuracy issues)
+
+### Agent Management
+- [ ] Agent Active/Inactive toggle option for admins
+- [ ] Ticket auto-assignment to online agents only (skip offline/inactive agents)
+
+### Authentication & Security
+- [x] Google Auth Login in Widget for customers (✅ Complete - see GOOGLE_AUTH_IMPLEMENTATION_COMPLETE.md)

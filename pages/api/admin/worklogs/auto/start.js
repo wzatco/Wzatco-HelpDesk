@@ -40,7 +40,7 @@ export default async function handler(req, res) {
 
     // Verify conversation exists
     const conversation = await prisma.conversation.findUnique({
-      where: { id: conversationId }
+      where: { ticketNumber: conversationId }
     });
 
     if (!conversation) {

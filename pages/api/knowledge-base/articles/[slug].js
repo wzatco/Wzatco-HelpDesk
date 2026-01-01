@@ -51,7 +51,8 @@ export default async function handler(req, res) {
       article: {
         ...article,
         views: (article.views || 0) + 1, // Return updated view count
-        tags: article.tags ? JSON.parse(article.tags) : []
+        tags: article.tags ? JSON.parse(article.tags) : [],
+        contentType: article.contentType || 'richtext' // Include contentType
       }
     });
   } catch (error) {

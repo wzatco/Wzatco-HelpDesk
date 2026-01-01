@@ -1,5 +1,6 @@
 // Widget API - Verify OTP for email verification
 import { PrismaClient } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 
 // Prisma singleton pattern
 let prisma;
@@ -11,6 +12,8 @@ if (process.env.NODE_ENV === 'production') {
   }
   prisma = global.prisma;
 }
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -99,9 +102,37 @@ export default async function handler(req, res) {
       }
     });
 
+    // Find or create Customer record
+    let customer = await prisma.customer.findUnique({
+      where: { email: emailLower }
+    });
+
+    if (!customer) {
+      // Create customer if doesn't exist
+      customer = await prisma.customer.create({
+        data: {
+          email: emailLower,
+          name: emailLower.split('@')[0] // Use email prefix as default name
+        }
+      });
+    }
+
+    // Generate JWT token for widget user
+    const token = jwt.sign(
+      {
+        id: customer.id,
+        email: customer.email,
+        name: customer.name,
+        type: 'customer'
+      },
+      JWT_SECRET,
+      { expiresIn: '30d' } // Token expires in 30 days
+    );
+
     res.status(200).json({
       success: true,
-      message: 'OTP verified successfully'
+      message: 'OTP verified successfully',
+      token: token
     });
 
   } catch (error) {

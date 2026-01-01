@@ -1,12 +1,25 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma, { ensurePrismaConnected } from '../../../../../lib/prisma';
 
 export default async function handler(req, res) {
+  // Ensure Prisma is connected before proceeding
+  await ensurePrismaConnected();
   const { id } = req.query;
 
   if (req.method === 'GET') {
     try {
+      // First verify the conversation exists
+      const conversation = await prisma.conversation.findUnique({
+        where: { ticketNumber: id },
+        select: { ticketNumber: true }
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ 
+          message: 'Ticket not found',
+          activities: []
+        });
+      }
+
       // Fetch activities for this ticket, ordered by most recent first
       const activities = await prisma.ticketActivity.findMany({
         where: { conversationId: id },

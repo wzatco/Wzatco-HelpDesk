@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export default async function handler(req, res) {
   try {
@@ -10,10 +13,14 @@ export default async function handler(req, res) {
       // Build date filter
       const dateFilter = {};
       if (startDate) {
-        dateFilter.gte = new Date(startDate);
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        dateFilter.gte = start;
       }
       if (endDate) {
-        dateFilter.lte = new Date(endDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.lte = end;
       }
 
       // Get policy counts
@@ -25,18 +32,14 @@ export default async function handler(req, res) {
         where: { isActive: true },
       });
 
-      // Get workflow counts
-      const workflowStats = await prisma.sLAWorkflow.groupBy({
-        by: ['isDraft', 'isActive'],
-        _count: true,
-      });
-
-      const draftWorkflows = workflowStats.find(s => s.isDraft)?._count || 0;
-      const publishedWorkflows = workflowStats.find(s => !s.isDraft && s.isActive)?._count || 0;
-
-      // Get timer stats
+      // Get timer stats (with date filter if provided)
+      const timerStatsWhere = {};
+      if (Object.keys(dateFilter).length > 0) {
+        timerStatsWhere.createdAt = dateFilter;
+      }
       const timerStats = await prisma.sLATimer.groupBy({
         by: ['status'],
+        where: timerStatsWhere,
         _count: true,
       });
 
@@ -45,10 +48,14 @@ export default async function handler(req, res) {
       const breachedTimers = timerStats.find(s => s.status === 'breached')?._count || 0;
 
       // Calculate timers at risk (>80% elapsed)
+      const runningTimerWhere = {
+        status: 'running',
+      };
+      if (Object.keys(dateFilter).length > 0) {
+        runningTimerWhere.createdAt = dateFilter;
+      }
       const allRunningTimers = await prisma.sLATimer.findMany({
-        where: {
-          status: 'running',
-        },
+        where: runningTimerWhere,
         select: {
           startedAt: true,
           targetTime: true,
@@ -80,12 +87,17 @@ export default async function handler(req, res) {
       });
 
       // Calculate compliance rate (tickets that met SLA vs breached)
-      const totalTicketsWithSLA = await prisma.sLATimer.count({
-        where: {
-          status: {
-            in: ['stopped', 'breached'],
-          },
+      // Use date filter for timers if provided
+      const timerWhere = {
+        status: {
+          in: ['stopped', 'breached'],
         },
+      };
+      if (Object.keys(dateFilter).length > 0) {
+        timerWhere.createdAt = dateFilter;
+      }
+      const totalTicketsWithSLA = await prisma.sLATimer.count({
+        where: timerWhere,
       });
 
       const complianceRate = totalTicketsWithSLA > 0
@@ -93,16 +105,20 @@ export default async function handler(req, res) {
         : 0;
 
       // Get average response and resolution times
-      const completedTimers = await prisma.sLATimer.findMany({
-        where: {
-          status: 'stopped',
-          timerType: {
-            in: ['response', 'resolution'],
-          },
-          completedAt: {
-            not: null,
-          },
+      const completedTimerWhere = {
+        status: 'stopped',
+        timerType: {
+          in: ['response', 'resolution'],
         },
+        completedAt: {
+          not: null,
+        },
+      };
+      if (Object.keys(dateFilter).length > 0) {
+        completedTimerWhere.completedAt = dateFilter;
+      }
+      const completedTimers = await prisma.sLATimer.findMany({
+        where: completedTimerWhere,
         select: {
           timerType: true,
           startedAt: true,
@@ -129,9 +145,13 @@ export default async function handler(req, res) {
         : 0;
 
       // Get escalation stats
+      const escalationWhere = {};
+      if (Object.keys(dateFilter).length > 0) {
+        escalationWhere.escalatedAt = dateFilter;
+      }
       const escalationStats = await prisma.sLAEscalation.groupBy({
         by: ['escalationLevel'],
-        where: dateFilter.gte || dateFilter.lte ? { escalatedAt: dateFilter } : {},
+        where: escalationWhere,
         _count: true,
       });
 
@@ -141,10 +161,6 @@ export default async function handler(req, res) {
           policies: {
             total: policyStats._count,
             active: activePolicies,
-          },
-          workflows: {
-            draft: draftWorkflows,
-            published: publishedWorkflows,
           },
           timers: {
             running: runningTimers,

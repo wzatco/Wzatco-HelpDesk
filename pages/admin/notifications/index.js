@@ -97,7 +97,7 @@ export default function NotificationsPage() {
                   {selected.conversationId && (
                     <div className="pt-4">
                       <a 
-                        href={`/admin/tickets/${selected.conversationId}`} 
+                        href={`/admin/tickets/${selected.ticketNumber || selected.conversationId}`} 
                         className="inline-flex items-center text-sm text-violet-700 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 underline transition-colors"
                       >
                         Open related ticket

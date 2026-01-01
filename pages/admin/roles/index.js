@@ -280,6 +280,23 @@ export default function RolesPage() {
             />
           </div>
 
+          {/* Escalation Guide Banner */}
+          <div className="bg-violet-50 dark:bg-violet-900/20 border-2 border-violet-200 dark:border-violet-800 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
+                <span className="text-2xl">⚡</span>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-violet-900 dark:text-violet-100 mb-2">
+                  Auto-Escalation Enabled Roles
+                </h3>
+                <p className="text-sm text-violet-700 dark:text-violet-300 leading-relaxed">
+                  To enable the <strong className="font-semibold">"Escalate to Team Leader"</strong> feature, create roles with exactly one of these titles: <strong className="font-semibold">"Department Head"</strong>, <strong className="font-semibold">"Team Leader"</strong>, <strong className="font-semibold">"Team Lead"</strong>, <strong className="font-semibold">"Supervisor"</strong>, or <strong className="font-semibold">"Manager"</strong>. Agents with these roles will automatically receive escalated tickets for their department.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Notification Toast */}
           <NotificationToast 
             notification={notification} 

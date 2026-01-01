@@ -267,14 +267,14 @@ export default function AssignedToMePage() {
           ) : (
             tickets.map((ticket) => (
               <article
-                key={ticket.id}
+                key={ticket.ticketNumber}
                 className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm hover:border-violet-200 dark:hover:border-violet-500/60 transition-colors cursor-pointer"
-                onClick={() => router.push(`/admin/tickets/${ticket.id}`)}
+                onClick={() => router.push(`/admin/tickets/${ticket.ticketNumber}`)}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                      <span>{ticket.id}</span>
+                      <span>{ticket.ticketNumber}</span>
                       <span>·</span>
                       <span>{ticket.priority?.toUpperCase() || 'Normal'}</span>
                     </div>
@@ -304,7 +304,7 @@ export default function AssignedToMePage() {
                   {ticket.department && (
                     <div className="inline-flex items-center gap-1">
                       <UserCircle className="w-3.5 h-3.5" />
-                      {ticket.department}
+                      {typeof ticket.department === 'object' ? ticket.department.name : ticket.department}
                     </div>
                   )}
                 </div>

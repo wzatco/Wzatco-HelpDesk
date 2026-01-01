@@ -1,8 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-});
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -10,8 +6,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Test connection first
-    await prisma.$connect();
+    // Ensure Prisma is connected
+    await ensurePrismaConnected();
     
     const counts = {
       agents: await prisma.agent.count().catch(() => 0),
@@ -21,7 +17,6 @@ export default async function handler(req, res) {
       departments: await prisma.department.count().catch(() => 0),
       roles: await prisma.role.count().catch(() => 0),
       slaPolicies: await prisma.sLAPolicy.count().catch(() => 0),
-      slaWorkflows: await prisma.sLAWorkflow.count().catch(() => 0),
       slaTimers: await prisma.sLATimer.count().catch(() => 0),
       products: await prisma.product.count().catch(() => 0),
     };
@@ -33,7 +28,7 @@ export default async function handler(req, res) {
     const samples = {
       agents: await prisma.agent.findMany({ take: 5, select: { id: true, name: true, email: true } }).catch(() => []),
       customers: await prisma.customer.findMany({ take: 5, select: { id: true, name: true, email: true } }).catch(() => []),
-      conversations: await prisma.conversation.findMany({ take: 5, select: { id: true, subject: true, status: true } }).catch(() => []),
+      conversations: await prisma.conversation.findMany({ take: 5, select: { ticketNumber: true, subject: true, status: true } }).catch(() => []),
       slaPolicies: await prisma.sLAPolicy.findMany({ take: 5, select: { id: true, name: true, isActive: true } }).catch(() => []),
     };
 
@@ -57,8 +52,7 @@ export default async function handler(req, res) {
         }
       } : undefined,
     });
-  } finally {
-    await prisma.$disconnect().catch(() => {});
   }
+  // NOTE: Do NOT disconnect Prisma here - it's a singleton shared across all requests
 }
 

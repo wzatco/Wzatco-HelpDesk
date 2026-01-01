@@ -1,15 +1,17 @@
 import { Server } from 'socket.io'
-import { PrismaClient } from '@prisma/client'
+import prisma from '../../lib/prisma'
+import jwt from 'jsonwebtoken'
 
-const prisma = new PrismaClient()
+// Get JWT secret from environment variable
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.warn('⚠️  WARNING: JWT_SECRET is not set in environment variables. Using fallback secret (NOT SECURE FOR PRODUCTION).');
+}
 
 // In-memory store for agent presence tracking
 // Maps agentId -> { socketIds: Set, presenceStatus, lastSeenAt }
 const agentPresenceMap = new Map()
-
-// In-memory store for ticket view tracking
-// Maps ticketId -> Set of { userId, userName, userAvatar, socketId }
-const ticketViewersMap = new Map()
 
 // In-memory store for customer activity tracking
 // Maps conversationId -> Set of customer socketIds (to track if customer is active on a ticket)
@@ -66,24 +68,135 @@ export default async function handler(req, res) {
       }
     }
 
-    io.on('connection', (socket) => {
-      const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization
-      // Simple dev auth: token containing 'admin' => admin user; otherwise anonymous customer
+    io.on('connection', async (socket) => {
+      const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '')
+      
       let user = { id: `anon_${socket.id}`, role: 'customer', name: 'Anonymous', agentId: null }
-      if (token && String(token).toLowerCase().includes('admin')) {
-        user = { id: 'u_admin', role: 'admin', name: 'Admin Demo', agentId: null }
+      
+      // Try to authenticate with JWT token
+      if (token) {
+        try {
+          const secret = JWT_SECRET || 'your-secret-key-change-in-production';
+          const decoded = jwt.verify(token, secret)
+          
+          // Check if it's an agent token
+          if (decoded.type === 'agent' && decoded.id) {
+            // Find agent in database
+            const agent = await prisma.agent.findUnique({
+              where: { id: decoded.id },
+              include: {
+                department: { select: { id: true, name: true } },
+                role: { select: { id: true, title: true } },
+                account: { select: { id: true, name: true, email: true, avatarUrl: true } }
+              }
+            })
+            
+            if (agent && agent.isActive) {
+              user = {
+                id: agent.account?.id || agent.id,
+                role: 'agent',
+                name: agent.name,
+                email: agent.email || agent.account?.email,
+                agentId: agent.id,
+                departmentId: agent.departmentId,
+                roleId: agent.roleId,
+                avatarUrl: agent.account?.avatarUrl
+              }
+              
+              // Update agent presence to online
+              await updateAgentPresence(agent.id, 'online', new Date())
+            }
+          } else if (decoded.type === 'admin' || decoded.adminId) {
+            // Admin user - fetch from database
+            const adminId = decoded.adminId || decoded.userId;
+            
+            if (adminId) {
+              try {
+                // Try to find admin by adminId first
+                let admin = await prisma.admin.findUnique({
+                  where: { id: adminId },
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatarUrl: true
+                  }
+                });
+                
+                // If not found by adminId, try to find by userId (if adminId was actually a userId)
+                if (!admin && decoded.userId) {
+                  const user = await prisma.user.findUnique({
+                    where: { id: decoded.userId },
+                    select: { email: true }
+                  });
+                  
+                  if (user?.email) {
+                    admin = await prisma.admin.findUnique({
+                      where: { email: user.email },
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        avatarUrl: true
+                      }
+                    });
+                  }
+                }
+                
+                if (admin) {
+                  user = {
+                    id: admin.id,
+                    role: 'admin',
+                    name: admin.name || 'Admin',
+                    email: admin.email,
+                    avatarUrl: admin.avatarUrl,
+                    agentId: null
+                  };
+                } else {
+                  // Fallback: use token data if admin not found in DB
+                  user = {
+                    id: adminId,
+                    role: 'admin',
+                    name: decoded.name || 'Admin',
+                    agentId: null
+                  };
+                }
+              } catch (dbError) {
+                console.error('❌ [Socket] Error fetching admin from DB:', dbError);
+                // Fallback: use token data
+                user = {
+                  id: adminId,
+                  role: 'admin',
+                  name: decoded.name || 'Admin',
+                  agentId: null
+                };
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Socket auth error:', error)
+          // Fall back to anonymous user
+        }
       }
       
-      // Extract agentId from token if available (format: "admin-{agentId}" or similar)
-      // For now, we'll handle agent identification via presence:update event
       socket.data.user = user
-
       socket.emit('auth:success', { user })
+      
+      // Join personal room based on user role
+      if (user.role === 'agent' && user.agentId) {
+        const agentRoom = `agent_${user.agentId}`;
+        socket.join(agentRoom);
+        console.log(`👤 [Socket] Agent joined personal room: ${agentRoom}`);
+      } else if (user.role === 'admin' && user.id) {
+        const adminRoom = `admin_${user.id}`;
+        socket.join(adminRoom);
+        console.log(`👤 [Socket] Admin joined personal room: ${adminRoom}`);
+      }
 
       socket.on('join:conversation', async (payload, ack) => {
         try {
           const { conversationId } = payload || {}
-          const conv = await prisma.conversation.findUnique({ where: { id: conversationId } })
+          const conv = await prisma.conversation.findUnique({ where: { ticketNumber: conversationId } })
           if (!conv) {
             ack && ack({ success: false, code: 'not_found', message: 'Conversation not found' })
             return
@@ -116,85 +229,12 @@ export default async function handler(req, res) {
         }
       })
 
-      // Track ticket views for presence avatars
-      socket.on('ticket:view', async (payload, ack) => {
-        try {
-          const { ticketId, userId, userName, userAvatar } = payload || {}
-          if (!ticketId) {
-            ack && ack({ success: false, code: 'invalid_payload', message: 'ticketId is required' })
-            return
-          }
-
-          // Initialize ticket viewers set if not exists
-          if (!ticketViewersMap.has(ticketId)) {
-            ticketViewersMap.set(ticketId, new Map())
-          }
-          const viewers = ticketViewersMap.get(ticketId)
-
-          // Add viewer
-          viewers.set(socket.id, {
-            userId: userId || socket.data.user.id,
-            userName: userName || socket.data.user.name || 'Unknown',
-            userAvatar: userAvatar || null,
-            socketId: socket.id,
-            joinedAt: new Date()
-          })
-
-          // Store ticketId in socket data for cleanup
-          socket.data.viewingTicket = ticketId
-
-          // Broadcast to others viewing this ticket
-          socket.to(`ticket:${ticketId}`).emit('ticket:viewer:joined', {
-            ticketId,
-            viewer: {
-              userId: userId || socket.data.user.id,
-              userName: userName || socket.data.user.name || 'Unknown',
-              userAvatar: userAvatar || null
-            }
-          })
-
-          // Join ticket room
-          socket.join(`ticket:${ticketId}`)
-
-          // Send current viewers to the new viewer
-          const currentViewers = Array.from(viewers.values()).map(v => ({
-            userId: v.userId,
-            userName: v.userName,
-            userAvatar: v.userAvatar
-          }))
-
-          ack && ack({ success: true, viewers: currentViewers })
-        } catch (err) {
-          console.error('ticket:view error', err)
-          ack && ack({ success: false, code: 'server_error' })
-        }
-      })
-
       socket.on('ticket:leave', async (payload, ack) => {
         try {
           const { ticketId } = payload || {}
           const viewingTicket = ticketId || socket.data.viewingTicket
 
-          if (viewingTicket && ticketViewersMap.has(viewingTicket)) {
-            const viewers = ticketViewersMap.get(viewingTicket)
-            const viewer = viewers.get(socket.id)
-
-            if (viewer) {
-              // Remove viewer
-              viewers.delete(socket.id)
-
-              // If no more viewers, clean up
-              if (viewers.size === 0) {
-                ticketViewersMap.delete(viewingTicket)
-              } else {
-                // Broadcast to others
-                socket.to(`ticket:${viewingTicket}`).emit('ticket:viewer:left', {
-                  ticketId: viewingTicket,
-                  userId: viewer.userId
-                })
-              }
-            }
-
+          if (viewingTicket) {
             socket.leave(`ticket:${viewingTicket}`)
             socket.data.viewingTicket = null
           }
@@ -206,6 +246,48 @@ export default async function handler(req, res) {
         }
       })
 
+      // Internal Chat Room Handlers
+      socket.on('join_internal_chat', (chatId) => {
+        if (!chatId) {
+          console.warn('⚠️ [Socket] join_internal_chat called without chatId');
+          return;
+        }
+        const room = `internal:chat:${chatId}`;
+        socket.join(room);
+        console.log(`✅ [Socket] ${socket.id} (${socket.data.user?.role || 'unknown'}) joined ${room}`);
+      });
+
+      socket.on('leave_internal_chat', (chatId) => {
+        if (!chatId) {
+          console.warn('⚠️ [Socket] leave_internal_chat called without chatId');
+          return;
+        }
+        const room = `internal:chat:${chatId}`;
+        socket.leave(room);
+        console.log(`✅ [Socket] ${socket.id} left ${room}`);
+      });
+
+      // Generic room join/leave handlers (for backward compatibility)
+      socket.on('join_room', (payload) => {
+        const room = typeof payload === 'string' ? payload : payload?.room;
+        if (!room) {
+          console.warn('⚠️ [Socket] join_room called without room');
+          return;
+        }
+        socket.join(room);
+        console.log(`✅ [Socket] ${socket.id} joined room: ${room}`);
+      });
+
+      socket.on('leave_room', (payload) => {
+        const room = typeof payload === 'string' ? payload : payload?.room;
+        if (!room) {
+          console.warn('⚠️ [Socket] leave_room called without room');
+          return;
+        }
+        socket.leave(room);
+        console.log(`✅ [Socket] ${socket.id} left room: ${room}`);
+      });
+
       socket.on('message:send', async (payload, ack) => {
         try {
           const { conversationId, clientMessageId, content, type = 'text', metadata } = payload || {}
@@ -216,12 +298,45 @@ export default async function handler(req, res) {
           const senderType = socket.data.user.role === 'admin' ? 'agent' : 'customer'
           const msg = await prisma.message.create({ data: { conversationId, senderId: socket.data.user.id, senderType, content, type, metadata: metadata || {} } })
           
+          // Trigger webhook for message creation
+          try {
+            const { triggerWebhook } = await import('../../lib/utils/webhooks')
+            const conversation = await prisma.conversation.findUnique({
+              where: { ticketNumber: conversationId },
+              include: { customer: true, assignee: true }
+            })
+            await triggerWebhook('message.created', {
+              message: {
+                id: msg.id,
+                content: msg.content,
+                senderId: msg.senderId,
+                senderType: msg.senderType,
+                type: msg.type,
+                createdAt: msg.createdAt
+              },
+              ticket: {
+                ticketNumber: conversation?.ticketNumber || conversationId,
+                subject: conversation?.subject,
+                status: conversation?.status,
+                priority: conversation?.priority
+              },
+              customer: conversation?.customer ? {
+                id: conversation.customer.id,
+                name: conversation.customer.name,
+                email: conversation.customer.email
+              } : null
+            })
+          } catch (webhookError) {
+            console.error('Error triggering message.created webhook:', webhookError)
+            // Don't fail message creation if webhook fails
+          }
+          
           // Update TAT metrics if this is the first agent response
           if (senderType === 'agent') {
             try {
               // Check if this is the first response before updating TAT
               const conversation = await prisma.conversation.findUnique({
-                where: { id: conversationId },
+                where: { ticketNumber: conversationId },
                 include: { customer: true }
               })
 
@@ -284,7 +399,7 @@ export default async function handler(req, res) {
             // Customer sent a message - check if assigned agent is active
             try {
               const conversation = await prisma.conversation.findUnique({
-                where: { id: conversationId },
+                where: { ticketNumber: conversationId },
                 include: { 
                   customer: true,
                   assignee: true
@@ -437,28 +552,6 @@ export default async function handler(req, res) {
           if (presence.socketIds.size === 0) {
             await updateAgentPresence(agentId, 'offline')
             agentPresenceMap.delete(agentId)
-          }
-        }
-
-        // Cleanup ticket view tracking
-        const viewingTicket = socket.data.viewingTicket
-        if (viewingTicket && ticketViewersMap.has(viewingTicket)) {
-          const viewers = ticketViewersMap.get(viewingTicket)
-          const viewer = viewers.get(socket.id)
-
-          if (viewer) {
-            viewers.delete(socket.id)
-
-            // Broadcast to others
-            socket.to(`ticket:${viewingTicket}`).emit('ticket:viewer:left', {
-              ticketId: viewingTicket,
-              userId: viewer.userId
-            })
-
-            // Clean up if no more viewers
-            if (viewers.size === 0) {
-              ticketViewersMap.delete(viewingTicket)
-            }
           }
         }
 

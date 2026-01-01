@@ -1,5 +1,6 @@
 // Widget API - Fetch published Knowledge Base articles
 import { PrismaClient } from '@prisma/client';
+import { blocksToPlainText, isBlocksContent } from '@/utils/blockRenderer';
 
 // Prisma singleton pattern to prevent connection leaks
 let prisma;
@@ -58,12 +59,53 @@ export default async function handler(req, res) {
       }
     });
 
+    // Helper function to strip HTML and get clean excerpt (same as public API)
+    const getCleanExcerpt = (content, contentType, length = 200) => {
+      if (!content) return '';
+      
+      // Check if content is blocks format
+      if (isBlocksContent(content, contentType)) {
+        try {
+          const plainText = blocksToPlainText(content);
+          return plainText.length > length ? plainText.substring(0, length) + '...' : plainText;
+        } catch (e) {
+          // If conversion fails, fall back to HTML stripping
+          const text = content.replace(/<[^>]+>/g, '').trim();
+          return text.length > length ? text.substring(0, length) + '...' : text;
+        }
+      }
+      
+      // 1. Remove <style> and <script> blocks entirely
+      let text = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+                            
+      // 2. Remove all remaining HTML tags
+      text = text.replace(/<[^>]+>/g, '');
+      
+      // 3. Decode common entities
+      text = text.replace(/&nbsp;/g, ' ')
+                 .replace(/&amp;/g, '&')
+                 .replace(/&lt;/g, '<')
+                 .replace(/&gt;/g, '>')
+                 .replace(/&quot;/g, '"')
+                 .replace(/&#39;/g, "'")
+                 .replace(/&apos;/g, "'");
+
+      // 4. Clean up whitespace (multiple spaces/newlines to single space)
+      text = text.replace(/\s+/g, ' ').trim();
+      
+      // 5. Trim and Truncate
+      return text.length > length ? text.substring(0, length) + '...' : text;
+    };
+
     // Parse tags from JSON string and format for widget
     const formattedArticles = articles.map(article => ({
       id: article.id,
       title: article.title,
       content: article.content,
+      contentType: article.contentType,
       slug: article.slug,
+      excerpt: getCleanExcerpt(article.content, article.contentType, 200), // Add excerpt field
       category: article.category ? {
         id: article.category.id,
         name: article.category.name,

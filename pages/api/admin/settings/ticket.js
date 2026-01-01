@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
 
 const SETTINGS_KEYS = {
   ANY_STAFF_CAN_REPLY: 'ticket_any_staff_reply',
@@ -17,6 +15,9 @@ const SETTINGS_KEYS = {
 };
 
 export default async function handler(req, res) {
+  // Ensure Prisma is connected before proceeding
+  await ensurePrismaConnected();
+
   if (req.method === 'GET') {
     try {
       // Get all ticket settings
@@ -51,8 +52,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching ticket settings:', error);
       res.status(500).json({ success: false, message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
     }
   } else if (req.method === 'PATCH') {
     try {
@@ -179,8 +178,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error updating ticket settings:', error);
       res.status(500).json({ success: false, message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
     }
   } else {
     res.status(405).json({ success: false, message: 'Method not allowed' });

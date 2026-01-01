@@ -1,6 +1,7 @@
 // Widget API - OpenAI Chat Completion (Server-side only)
 import { PrismaClient } from '@prisma/client';
 import { decryptApiKey } from '@/lib/crypto-utils';
+import { blocksToPlainText, isBlocksContent } from '@/utils/blockRenderer';
 
 // Prisma singleton pattern
 let prisma;
@@ -228,7 +229,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message, conversationHistory = [], userName } = req.body;
+    const { message, conversationHistory = [], userName, image } = req.body;
 
     if (!message || !message.trim()) {
       return res.status(400).json({ success: false, message: 'Message is required' });
@@ -245,6 +246,120 @@ export default async function handler(req, res) {
 
     // Get feedback insights to improve AI responses
     const feedbackInsights = await getFeedbackInsights();
+    
+    // Analyze sentiment and detect aggression/frustration
+    let sentimentAnalysis = {
+      isAggressive: false,
+      isFrustrated: false,
+      sentiment: 'neutral',
+      shouldOfferTicket: false,
+      ticketRequestCount: 0
+    };
+    
+    try {
+      // Check conversation history for ticket requests
+      const ticketRequestKeywords = /(ticket|support ticket|create ticket|raise ticket|open ticket|need ticket|want ticket|i want.*ticket|create.*ticket|raise.*ticket|open.*ticket)/i;
+      const ticketRequestCount = conversationHistory.filter(msg => 
+        msg.role === 'user' && ticketRequestKeywords.test(msg.content)
+      ).length;
+      
+      // Analyze current message for aggression/frustration
+      const aggressionKeywords = /(angry|furious|frustrated|annoyed|irritated|disgusted|fed up|sick of|tired of|hate|disappointed|terrible|awful|worst|horrible|pathetic|useless|worthless|stupid|idiot|dumb|shame|disgrace)/i;
+      const frustrationKeywords = /(frustrated|frustrating|not working|doesn't work|broken|issue|problem|error|bug|defect|fault|malfunction|failed|failure|stuck|can't|cannot|unable|help me|need help|urgent|asap|immediately|right now|now|quickly|fast)/i;
+      
+      const isAggressive = aggressionKeywords.test(message);
+      const isFrustrated = frustrationKeywords.test(message) || ticketRequestCount > 0;
+      
+      // Use OpenAI to analyze sentiment more accurately
+      const sentimentPrompt = `Analyze the sentiment of this customer message and determine if they are aggressive, frustrated, or need a support ticket.
+
+Customer Message: "${message}"
+
+Conversation History (last 3 messages):
+${conversationHistory.slice(-3).map(m => `${m.role}: ${m.content}`).join('\n')}
+
+Respond with ONLY a valid JSON object in this exact format:
+{
+  "sentiment": "positive" | "neutral" | "negative" | "aggressive" | "frustrated",
+  "isAggressive": true or false,
+  "isFrustrated": true or false,
+  "shouldOfferTicket": true or false,
+  "confidence": 0.0 to 1.0
+}
+
+Rules:
+- If the message contains strong negative emotions, anger, or frustration, set "isAggressive" or "isFrustrated" to true
+- If the customer explicitly asks for a ticket or has asked multiple times, set "shouldOfferTicket" to true
+- If sentiment is clearly negative and customer seems frustrated, set "shouldOfferTicket" to true
+- Be conservative - only offer tickets when truly needed`;
+
+      try {
+        const sentimentResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a sentiment analysis assistant. Always respond with valid JSON only, using the exact format specified.'
+              },
+              {
+                role: 'user',
+                content: sentimentPrompt
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 200,
+            response_format: { type: "json_object" }
+          })
+        });
+
+        if (sentimentResponse.ok) {
+          const sentimentData = await sentimentResponse.json();
+          const sentimentText = sentimentData.choices[0]?.message?.content || '{}';
+          
+          try {
+            const parsed = JSON.parse(sentimentText);
+            sentimentAnalysis = {
+              isAggressive: parsed.isAggressive || isAggressive,
+              isFrustrated: parsed.isFrustrated || isFrustrated,
+              sentiment: parsed.sentiment || (isAggressive ? 'aggressive' : isFrustrated ? 'frustrated' : 'neutral'),
+              shouldOfferTicket: parsed.shouldOfferTicket || (isFrustrated && ticketRequestCount > 0),
+              ticketRequestCount: ticketRequestCount,
+              confidence: parsed.confidence || 0.7
+            };
+          } catch (parseError) {
+            console.error('Error parsing sentiment analysis:', parseError);
+            // Fallback to keyword-based detection
+            sentimentAnalysis = {
+              isAggressive: isAggressive,
+              isFrustrated: isFrustrated,
+              sentiment: isAggressive ? 'aggressive' : isFrustrated ? 'frustrated' : 'neutral',
+              shouldOfferTicket: isFrustrated && ticketRequestCount > 0,
+              ticketRequestCount: ticketRequestCount,
+              confidence: 0.6
+            };
+          }
+        }
+      } catch (sentimentError) {
+        console.error('Error in sentiment analysis:', sentimentError);
+        // Fallback to keyword-based detection
+        sentimentAnalysis = {
+          isAggressive: isAggressive,
+          isFrustrated: isFrustrated,
+          sentiment: isAggressive ? 'aggressive' : isFrustrated ? 'frustrated' : 'neutral',
+          shouldOfferTicket: isFrustrated && ticketRequestCount > 0,
+          ticketRequestCount: ticketRequestCount,
+          confidence: 0.5
+        };
+      }
+    } catch (error) {
+      console.error('Error in sentiment detection:', error);
+    }
     
     // Fetch product tutorials for context and AI selection
     let tutorialsContext = '';
@@ -512,6 +627,7 @@ Examples:
             id: true,
             title: true,
             content: true,
+            contentType: true,
             slug: true
           },
           orderBy: [
@@ -523,7 +639,14 @@ Examples:
         if (allArticles && allArticles.length > 0) {
           // Use AI to select relevant articles
           const articlesList = allArticles.map((article, index) => {
-            const cleanContent = article.content.replace(/<[^>]*>/g, '').substring(0, 300);
+            // Convert blocks to plain text if needed, otherwise strip HTML
+            let cleanContent;
+            if (isBlocksContent(article.content, article.contentType)) {
+              cleanContent = blocksToPlainText(article.content);
+            } else {
+              cleanContent = article.content.replace(/<[^>]*>/g, '');
+            }
+            cleanContent = cleanContent.substring(0, 300);
             return `${index + 1}. [ID: ${article.id}] ${article.title}\n   Summary: ${cleanContent}...`;
           }).join('\n\n');
 
@@ -617,8 +740,14 @@ If no articles are relevant, return: { "selectedArticleIds": [] }`;
         // Create context from KB articles
         kbContext = '\n\nKNOWLEDGE BASE ARTICLES (Use this information to answer questions):\n';
         kbArticles.forEach((article, index) => {
-          // Strip HTML tags for context
-          const cleanContent = article.content.replace(/<[^>]*>/g, '').substring(0, 500);
+          // Convert blocks to plain text if needed, otherwise strip HTML
+          let cleanContent;
+          if (isBlocksContent(article.content, article.contentType)) {
+            cleanContent = blocksToPlainText(article.content);
+          } else {
+            cleanContent = article.content.replace(/<[^>]*>/g, '');
+          }
+          cleanContent = cleanContent.substring(0, 500);
           kbContext += `\n${index + 1}. ${article.title}\n${cleanContent}...\n`;
         });
         kbContext += '\nIMPORTANT: When answering questions, use the Knowledge Base articles provided above to give accurate answers. However, DO NOT include markdown links, URLs, or references like "[Article Title](link)" in your response. Just provide the answer naturally based on the Knowledge Base content. The articles will be shown separately to the user as cards below your response.';
@@ -630,6 +759,23 @@ If no articles are relevant, return: { "selectedArticleIds": [] }`;
       console.error('Error fetching KB articles:', kbError);
     }
     
+    // Detect user language from message
+    const detectLanguage = (text) => {
+      // Simple language detection based on character patterns
+      const hindiPattern = /[\u0900-\u097F]/;
+      const chinesePattern = /[\u4E00-\u9FFF]/;
+      const arabicPattern = /[\u0600-\u06FF]/;
+      
+      if (hindiPattern.test(text)) return 'hindi';
+      if (chinesePattern.test(text)) return 'chinese';
+      if (arabicPattern.test(text)) return 'arabic';
+      
+      // Default to English, but can be enhanced with more sophisticated detection
+      return 'english';
+    };
+    
+    const userLanguage = detectLanguage(message);
+    
     // Build dynamic system prompt based on feedback
     let systemPrompt = `You are a helpful support assistant for WZATCO, a projector brand. You help customers with:
     - Projector setup and installation
@@ -639,7 +785,51 @@ If no articles are relevant, return: { "selectedArticleIds": [] }`;
     - General projector-related questions
     - Tutorials, guides, manuals, and video demonstrations
 
-Be friendly, professional, and concise. Always use the Knowledge Base articles provided to give accurate, detailed answers. If you don't know something, suggest checking the knowledge base or contacting support.${kbContext}${tutorialsContext}`;
+Be friendly, professional, and concise. Always use the Knowledge Base articles provided to give accurate, detailed answers. If you don't know something, suggest checking the knowledge base or contacting support.${kbContext}${tutorialsContext}
+
+IMPORTANT - MULTI-LANGUAGE SUPPORT:
+- The customer is communicating in ${userLanguage === 'hindi' ? 'Hindi' : userLanguage === 'chinese' ? 'Chinese' : userLanguage === 'arabic' ? 'Arabic' : 'English'}.
+- You MUST respond in the SAME language the customer is using.
+- If the customer writes in Hindi, respond in Hindi. If they write in English, respond in English.
+- Always match the customer's language preference naturally.`;
+
+    // Add sentiment-aware guidance
+    if (sentimentAnalysis.isAggressive || sentimentAnalysis.isFrustrated) {
+      systemPrompt += `\n\n⚠️ CUSTOMER SENTIMENT ALERT:
+- The customer appears ${sentimentAnalysis.isAggressive ? 'aggressive' : 'frustrated'}.
+- Be extra empathetic, patient, and understanding.
+- Acknowledge their frustration: "I understand this is frustrating for you."
+- Offer to escalate to human support if appropriate.
+- If they seem very frustrated or have asked for a ticket multiple times, offer to create a support ticket.`;
+    }
+    
+    if (sentimentAnalysis.shouldOfferTicket) {
+      systemPrompt += `\n\n🎫 TICKET CREATION OFFER:
+- The customer has ${sentimentAnalysis.ticketRequestCount > 0 ? `asked for a ticket ${sentimentAnalysis.ticketRequestCount} time(s)` : 'shown signs of frustration'}.
+- You MUST offer to create a support ticket for them.
+- IMPORTANT: When offering ticket creation, say something like: "I understand you need additional help. Would you like me to create a support ticket so our team can assist you directly? Please click the 'Create Support Ticket' button below, and I'll guide you through the process step by step."
+- DO NOT ask for all details at once. DO NOT list multiple questions. Simply offer the ticket creation and mention that a form will guide them through the process.
+- If the customer confirms (says "yes", "create ticket", "please create", etc.), acknowledge and tell them to click the button that will appear.`;
+    }
+    
+    // Check if user is confirming ticket creation
+    const ticketConfirmationKeywords = /(yes|yeah|yep|sure|ok|okay|please create|create ticket|create a ticket|i want.*ticket|make.*ticket|raise.*ticket)/i;
+    const isConfirmingTicket = ticketConfirmationKeywords.test(message) && (sentimentAnalysis.shouldOfferTicket || sentimentAnalysis.ticketRequestCount > 0);
+    
+    if (isConfirmingTicket) {
+      systemPrompt += `\n\n✅ TICKET CREATION CONFIRMATION:
+- The customer has confirmed they want to create a ticket.
+- Respond BRIEFLY with something like: "Perfect! I'll help you create a support ticket. The ticket creation form will open now, and I'll guide you through the process step by step. Please answer each question as it appears."
+- DO NOT ask for any details or list questions. The ticket creation form will handle all questions one by one.
+- Keep your response very brief (1-2 sentences maximum).`;
+    } else if (sentimentAnalysis.shouldOfferTicket) {
+      systemPrompt += `\n\n🎫 TICKET CREATION OFFER:
+- The customer has ${sentimentAnalysis.ticketRequestCount > 0 ? `asked for a ticket ${sentimentAnalysis.ticketRequestCount} time(s)` : 'shown signs of frustration'}.
+- You MUST offer to create a support ticket for them.
+- IMPORTANT: When offering ticket creation, say something like: "I understand this is frustrating for you. Would you like me to create a support ticket so our team can assist you directly? Just let me know and I'll open the ticket creation form for you."
+- DO NOT ask for any details. DO NOT list questions. Simply offer the ticket creation.
+- Keep your response brief and empathetic.`;
+    }
 
     // Add user's name for personalization
     if (userName && userName.trim() && userName.toLowerCase() !== 'there' && userName.toLowerCase() !== 'guest') {
@@ -703,11 +893,33 @@ Be friendly, professional, and concise. Always use the Knowledge Base articles p
         content: systemPrompt
       },
       ...conversationHistory.slice(-10), // Last 10 messages for context
-      {
+    ];
+
+    // Add user message with optional image
+    if (image) {
+      // GPT-4o Vision format with image
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: message
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: image // Expects base64 data URL or public URL
+            }
+          }
+        ]
+      });
+    } else {
+      // Text-only message
+      messages.push({
         role: 'user',
         content: message
-      }
-    ];
+      });
+    }
 
     // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -717,10 +929,10 @@ Be friendly, professional, and concise. Always use the Knowledge Base articles p
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o', // GPT-4o supports vision and is faster/cheaper than gpt-4-turbo
         messages: messages,
         temperature: 0.7,
-        max_tokens: 500,
+        max_tokens: image ? 1000 : 500, // More tokens for image analysis
         stream: false
       })
     });
@@ -766,6 +978,11 @@ Be friendly, professional, and concise. Always use the Knowledge Base articles p
       categoryProducts: categoryProductsList,
       requestedTutorialType: requestedTutorialType,
       requestedTutorialTypeLabel: requestedTutorialTypeLabel,
+      // Sentiment analysis and ticket creation flags
+      sentimentAnalysis: sentimentAnalysis,
+      shouldOfferTicket: sentimentAnalysis.shouldOfferTicket,
+      isConfirmingTicket: isConfirmingTicket,
+      detectedLanguage: userLanguage,
       model: data.model,
       usage: data.usage
     });

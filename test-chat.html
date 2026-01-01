@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Live Chat - Quick Test Tool</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            display: none;
+        }
+        .log.show {
+            display: block;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Live Chat</h1>
+        <p class="subtitle">Quick tool to create test conversations for the admin panel</p>
+        
+        <form id="chatForm">
+            <div class="form-group">
+                <label for="name">Customer Name *</label>
+                <input type="text" id="name" required value="Test Customer">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Customer Email *</label>
+                <input type="email" id="email" required value="test@example.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="department">Department *</label>
+                <select id="department" required>
+                    <option value="Technical Support">Technical Support</option>
+                    <option value="Sales">Sales</option>
+                    <option value="General">General</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="message">Initial Message *</label>
+                <textarea id="message" required>Hello! This is a test message from the test tool.</textarea>
+            </div>
+            
+            <button type="submit" id="submitBtn">Create Test Chat</button>
+        </form>
+        
+        <div id="status" class="status"></div>
+        
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        const WIDGET_BACKEND_URL = 'http://localhost:5000';
+        let socket = null;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            logDiv.classList.add('show');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="timestamp">[${new Date().toLocaleTimeString()}]</span> ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            setTimeout(() => {
+                statusDiv.className = 'status';
+            }, 5000);
+        }
+
+        function connectSocket() {
+            if (socket && socket.connected) {
+                return socket;
+            }
+
+            log('Connecting to widget backend...', 'info');
+            socket = io(WIDGET_BACKEND_URL, {
+                transports: ['websocket', 'polling'],
+                reconnection: true
+            });
+
+            socket.on('connect', () => {
+                log('✅ Connected to widget backend!', 'success');
+                showStatus('Connected to chat server', 'success');
+            });
+
+            socket.on('disconnect', () => {
+                log('❌ Disconnected from widget backend', 'error');
+                showStatus('Disconnected from chat server', 'error');
+            });
+
+            socket.on('chat_joined', (data) => {
+                log(`✅ Chat created! ID: ${data.chatId}`, 'success');
+                showStatus(`Chat created successfully! Chat ID: ${data.chatId}`, 'success');
+                log('Now refresh the admin panel live chat page to see it!', 'info');
+            });
+
+            socket.on('error', (error) => {
+                log(`❌ Error: ${error.message}`, 'error');
+                showStatus(`Error: ${error.message}`, 'error');
+            });
+
+            return socket;
+        }
+
+        document.getElementById('chatForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating...';
+
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const department = document.getElementById('department').value;
+            const message = document.getElementById('message').value;
+
+            try {
+                log('Creating test chat...', 'info');
+                log(`Name: ${name}`, 'info');
+                log(`Email: ${email}`, 'info');
+                log(`Department: ${department}`, 'info');
+
+                const currentSocket = connectSocket();
+                
+                // Wait for connection if not connected
+                if (!currentSocket.connected) {
+                    log('Waiting for connection...', 'info');
+                    await new Promise((resolve) => {
+                        currentSocket.once('connect', resolve);
+                        setTimeout(resolve, 5000); // Timeout after 5 seconds
+                    });
+                }
+
+                if (!currentSocket.connected) {
+                    throw new Error('Could not connect to widget backend. Make sure it\'s running on port 5000.');
+                }
+
+                // Emit join_chat event
+                currentSocket.emit('join_chat', {
+                    name,
+                    email,
+                    department,
+                    message,
+                    metadata: {
+                        source: 'test-tool',
+                        timestamp: new Date().toISOString()
+                    }
+                });
+
+                log('Chat request sent! Waiting for confirmation...', 'info');
+
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+                showStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Test Chat';
+            }
+        });
+
+        // Auto-connect on load
+        window.addEventListener('load', () => {
+            log('Page loaded. Ready to create test chats!', 'info');
+            connectSocket();
+        });
+    </script>
+</body>
+</html>
+

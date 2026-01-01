@@ -1,13 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 
 export default function PageTransition({ children }) {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  // Keep track of the timeout so we can clear it if the page loads fast
+  const timeoutRef = useRef(null);
 
   useEffect(() => {
-    const handleStart = () => setIsLoading(true);
-    const handleComplete = () => setIsLoading(false);
+    const handleStart = (url) => {
+      // 1. Don't show loader if clicking the link we are currently on
+      if (url === router.asPath) return;
+
+      setIsLoading(true);
+
+      // 2. SAFETY VALVE: Force remove loader after 8 seconds
+      // This prevents the "infinite loading" bug if the browser misses the completion event
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        setIsLoading(false);
+        console.warn('Page transition timed out - forcing loader to close');
+      }, 8000); 
+    };
+
+    const handleComplete = () => {
+      setIsLoading(false);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
 
     router.events.on('routeChangeStart', handleStart);
     router.events.on('routeChangeComplete', handleComplete);
@@ -17,6 +36,7 @@ export default function PageTransition({ children }) {
       router.events.off('routeChangeStart', handleStart);
       router.events.off('routeChangeComplete', handleComplete);
       router.events.off('routeChangeError', handleComplete);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [router]);
 

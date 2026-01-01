@@ -1,6 +1,10 @@
 import { PrismaClient } from '@prisma/client';
+import { calculateAgentTAT } from '../../../../lib/utils/tat';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -53,15 +57,19 @@ export default async function handler(req, res) {
     const now = new Date();
     const thresholdMs = parseFloat(thresholdHours) * 60 * 60 * 1000;
 
-    // Calculate TAT for each ticket
-    const tatReports = tickets.map(ticket => {
+    // Calculate TAT for each ticket (with active time)
+    // NOTE: Business hours calculation can be added by integrating with BusinessHours config
+    // Current calculation uses absolute time (24/7)
+    const tatReports = await Promise.all(tickets.map(async (ticket) => {
       let resolutionTimeHours = null;
       let status = 'open';
       let exceeded = false;
 
+      // Calculate Calendar Resolution Time (Total duration ticket was open)
       if (ticket.status === 'resolved' || ticket.status === 'closed') {
         const resolvedActivity = ticket.activities[0];
         if (resolvedActivity) {
+          // Calculate resolution time from ticket creation to resolution
           const createdTime = ticket.createdAt.getTime();
           const resolvedTime = resolvedActivity.createdAt.getTime();
           resolutionTimeHours = (resolvedTime - createdTime) / (1000 * 60 * 60);
@@ -77,8 +85,21 @@ export default async function handler(req, res) {
         exceeded = resolutionTimeHours > parseFloat(thresholdHours);
       }
 
+      // Calculate Active TAT (Total duration agent actually worked)
+      let activeSeconds = 0;
+      let activeTimeHours = null;
+      try {
+        activeSeconds = await calculateAgentTAT(prisma, ticket.ticketNumber);
+        if (activeSeconds > 0) {
+          activeTimeHours = Math.round((activeSeconds / 3600) * 100) / 100;
+        }
+      } catch (error) {
+        console.error(`Error calculating active time for ticket ${ticket.ticketNumber}:`, error);
+        // Keep activeSeconds as 0 if calculation fails
+      }
+
       return {
-        ticketId: ticket.id,
+        ticketId: ticket.ticketNumber,
         subject: ticket.subject || 'No Subject',
         status,
         customerName: ticket.customer?.name || ticket.customerName || 'Unknown',
@@ -87,11 +108,13 @@ export default async function handler(req, res) {
         productModel: ticket.productModel || 'N/A',
         priority: ticket.priority || 'low',
         createdAt: ticket.createdAt,
-        resolutionTimeHours: resolutionTimeHours ? Math.round(resolutionTimeHours * 100) / 100 : null,
+        resolutionTimeHours: resolutionTimeHours ? Math.round(resolutionTimeHours * 100) / 100 : null, // Calendar TAT
+        activeSeconds, // Active TAT in seconds
+        activeTimeHours, // Active TAT in hours (formatted for display)
         exceeded,
         thresholdHours: parseFloat(thresholdHours)
       };
-    });
+    }));
 
     // Filter exceeded tickets
     const exceededTickets = tatReports.filter(t => t.exceeded);
@@ -123,8 +146,6 @@ export default async function handler(req, res) {
       message: 'Error fetching TAT reports',
       error: error.message 
     });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

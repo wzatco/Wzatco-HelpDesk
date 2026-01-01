@@ -9,6 +9,7 @@ import Header from '../../components/public/Header';
 import Sidebar from '../../components/public/Sidebar';
 import CustomerWidget from '../../components/widget/CustomerWidget';
 import { ArrowLeft, BookOpen, Calendar, Eye, Loader2, Tag } from 'lucide-react';
+import BlockRenderer from '../../components/public/BlockRenderer';
 
 export default function PublicArticlePage() {
   const router = useRouter();
@@ -92,9 +93,22 @@ export default function PublicArticlePage() {
 
     return (
       <div className="space-y-3 sm:space-y-4">
-        <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 sm:p-4 md:p-5">
+        <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-3 sm:p-4 md:p-4 lg:p-5">
           {article.content ? (
-            /<\/?[a-z][\s\S]*>/i.test(article.content) ? (
+            article.contentType === 'blocks' ? (
+              // Render blocks
+              (() => {
+                try {
+                  const blocks = typeof article.content === 'string' 
+                    ? JSON.parse(article.content) 
+                    : article.content;
+                  return <BlockRenderer blocks={blocks} />;
+                } catch (e) {
+                  console.error('Error parsing blocks:', e);
+                  return <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">Error rendering article content.</p>;
+                }
+              })()
+            ) : /<\/?[a-z][\s\S]*>/i.test(article.content) ? (
               <div
                 className="prose prose-slate dark:prose-invert max-w-none prose-headings:text-slate-900 dark:prose-headings:text-white prose-headings:font-semibold prose-p:text-slate-700 dark:prose-p:text-slate-300 prose-p:leading-relaxed prose-a:text-violet-600 dark:prose-a:text-violet-400 prose-a:no-underline hover:prose-a:underline prose-strong:text-slate-900 dark:prose-strong:text-white prose-ul:text-slate-700 dark:prose-ul:text-slate-300 prose-ol:text-slate-700 dark:prose-ol:text-slate-300 prose-headings:text-base sm:prose-headings:text-lg md:prose-headings:text-xl prose-p:text-xs sm:prose-p:text-sm prose-sm prose-img:max-w-full prose-img:h-auto prose-img:rounded-lg prose-table:w-full prose-table:overflow-x-auto prose-headings:mb-2 prose-headings:mt-3 prose-p:mb-2"
                 style={{
@@ -166,13 +180,13 @@ export default function PublicArticlePage() {
 
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto w-full">
-            <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4 px-3 sm:px-4 md:px-6 py-4 sm:py-6 pb-8">
+            <div className="w-full space-y-3 sm:space-y-4 px-2 sm:px-3 py-4 sm:py-6 pb-8">
               {/* Back Button */}
               <Link
                 href="/"
-                className="inline-flex items-center text-xs text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 mb-3 transition-colors"
+                className="inline-flex items-center gap-2 px-3 py-2 mb-4 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-violet-300 dark:hover:border-violet-600 hover:text-violet-600 dark:hover:text-violet-400 transition-all duration-200 shadow-sm hover:shadow"
               >
-                <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+                <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Back to Knowledge Base</span>
                 <span className="sm:hidden">Back</span>
               </Link>

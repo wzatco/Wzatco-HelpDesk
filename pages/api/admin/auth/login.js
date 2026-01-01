@@ -1,10 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
 import { getSecuritySettings, getCaptchaSettings } from '../../../../lib/settings';
 import { validateCaptcha } from '../../../../lib/captcha';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
 
 // Store failed login attempts in memory (in production, use Redis or database)
 const failedAttempts = new Map(); // email -> { count: number, lockedUntil: Date }
@@ -16,6 +14,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensurePrismaConnected();
     const { email, password, captchaInput, captcha } = req.body;
     const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
 
@@ -40,7 +39,8 @@ export default async function handler(req, res) {
     let captchaEnabledForAdminLogin = false;
     try {
       captchaSettings = await getCaptchaSettings();
-      captchaEnabledForAdminLogin = captchaSettings.enabledPlacements.adminLogin !== false;
+      // Explicitly check if adminLogin is true (not just not false)
+      captchaEnabledForAdminLogin = captchaSettings.enabledPlacements?.adminLogin === true;
     } catch (error) {
       console.error('Error fetching captcha settings:', error);
       // Default to disabled if database query fails
@@ -219,21 +219,24 @@ export default async function handler(req, res) {
         adminId: admin.id
       },
       jwtSecret,
-      { expiresIn: '48h' } // Token expires in 48 hours
+      { expiresIn: '15d' } // Token expires in 15 days
     );
 
-    // Set httpOnly cookie for server-side authentication
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 48 * 60 * 60, // 48 hours in seconds
-      path: '/',
-    };
+    // Set httpOnly cookie for server-side authentication with more aggressive settings
+    const cookieMaxAge = 15 * 24 * 60 * 60; // 15 days in seconds
+    const isProduction = process.env.NODE_ENV === 'production';
     
-    res.setHeader('Set-Cookie', [
-      `authToken=${token}; HttpOnly; ${cookieOptions.secure ? 'Secure;' : ''} SameSite=${cookieOptions.sameSite}; Max-Age=${cookieOptions.maxAge}; Path=${cookieOptions.path}`,
-    ]);
+    // Set cookie with explicit settings to prevent clearing
+    const cookieString = [
+      `authToken=${token}`,
+      'HttpOnly',
+      'Path=/',
+      `Max-Age=${cookieMaxAge}`,
+      'SameSite=Lax',
+      isProduction ? 'Secure' : ''
+    ].filter(Boolean).join('; ');
+    
+    res.setHeader('Set-Cookie', cookieString);
 
     res.status(200).json({
       success: true,
@@ -262,8 +265,6 @@ export default async function handler(req, res) {
       success: false,
       message: 'Internal server error'
     });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

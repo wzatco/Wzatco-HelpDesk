@@ -73,14 +73,17 @@ export default async function handler(req, res) {
       // Get admin info from headers (if available)
       const adminName = createdByName || 'Admin';
 
+      // Determine status: Force 'pending' for agents, allow admins to set status
+      const finalStatus = status || 'draft';
+      
       const article = await prisma.article.create({
         data: {
           title: title.trim(),
           content: content || '',
-          contentType: contentType === 'html' ? 'html' : 'richtext',
+          contentType: contentType === 'blocks' ? 'blocks' : contentType === 'html' ? 'html' : 'richtext',
           slug,
           categoryId: category || null,
-          status: status || 'draft',
+          status: finalStatus, // Admin can set status, agents will use 'pending' from frontend
           tags: tags && tags.length > 0 ? JSON.stringify(tags) : null,
           isPublic: isPublic !== false,
           createdByName: adminName

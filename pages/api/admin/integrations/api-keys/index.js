@@ -1,7 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 // Generate a secure API key
 function generateApiKey(prefix = 'sk_live_') {
@@ -40,8 +43,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching API keys:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else if (req.method === 'POST') {
     try {
@@ -112,8 +113,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error creating API key:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else {
     res.status(405).json({ success: false, message: 'Method not allowed' });

@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
@@ -26,8 +29,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching webhooks:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else if (req.method === 'POST') {
     try {
@@ -108,8 +109,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error creating webhook:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else {
     res.status(405).json({ success: false, message: 'Method not allowed' });

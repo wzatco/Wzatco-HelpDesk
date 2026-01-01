@@ -1,46 +1,42 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../../lib/prisma';
 import { generateSlug, generateUniqueSlug } from '../../../../lib/utils/slug';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
-
 export default async function handler(req, res) {
   const userId = getCurrentUserId(req);
-  
+
   if (req.method === 'GET') {
     // Check permission to view agents (only if userId exists)
+    // For sidebar usage, we'll be more lenient - allow if no userId
     if (userId) {
       try {
         const hasAccess = await checkPermissionOrFail(userId, 'admin.agents', res);
-        if (!hasAccess) return;
+        if (!hasAccess) {
+          // checkPermissionOrFail already sent 403 response, so return early
+          return;
+        }
       } catch (permError) {
         console.error('Permission check error:', permError);
-        // Continue if permission check fails (for development/testing)
-        if (process.env.NODE_ENV === 'production') {
-          return res.status(500).json({
-            success: false,
-            message: 'Permission check failed',
-            error: permError.message
-          });
-        }
+        // If permission check throws an error, send 500 response
+        return res.status(500).json({
+          success: false,
+          message: 'Permission check failed',
+          error: permError.message
+        });
       }
     }
+    // If no userId, continue (for development/testing or public endpoints)
     try {
+      // Add a small delay to ensure Prisma engine is ready
+      // This prevents "Response from the Engine was empty" errors
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       // Fetch agents with their related data
       // Try with account relation first, fall back without it if it fails
       let agents;
       let includeAccount = true;
-      
+
       try {
         agents = await prisma.agent.findMany({
           include: {
@@ -79,20 +75,17 @@ export default async function handler(req, res) {
             },
             assignedConversations: {
               select: {
-                id: true,
+                ticketNumber: true,
                 status: true,
+                createdAt: true,
                 updatedAt: true,
-                lastMessageAt: true,
                 messages: {
-                  where: {
-                    senderType: 'agent'
-                  },
                   select: {
-                    createdAt: true,
-                    senderId: true
+                    senderType: true,
+                    createdAt: true
                   },
                   orderBy: {
-                    createdAt: 'desc'
+                    createdAt: 'asc'
                   }
                 }
               }
@@ -112,7 +105,10 @@ export default async function handler(req, res) {
         if (accountError.message && accountError.message.includes('accountId')) {
           console.warn('Warning: accountId column not found, fetching agents without account relation');
           includeAccount = false;
-          
+
+          // Add delay before retry to let Prisma engine stabilize
+          await new Promise(resolve => setTimeout(resolve, 100));
+
           agents = await prisma.agent.findMany({
             include: {
               department: {
@@ -168,159 +164,111 @@ export default async function handler(req, res) {
       // Calculate real performance metrics for each agent
       const transformedAgents = await Promise.all(agents.map(async (agent) => {
         try {
-        const assignedConversations = agent.assignedConversations || [];
-        
-        // Calculate tickets resolved (closed or resolved status)
-        const resolvedTickets = assignedConversations.filter(
-          conv => conv.status === 'resolved' || conv.status === 'closed'
-        ).length;
+          const assignedConversations = agent.assignedConversations || [];
 
-        // Get all conversations assigned to this agent
-        const conversationIds = assignedConversations.map(c => c.id);
+          // Calculate tickets resolved (closed or resolved status)
+          const resolvedTickets = assignedConversations.filter(
+            conv => conv.status === 'resolved' || conv.status === 'closed'
+          ).length;
 
-        // Get all agent messages in these conversations
-        const agentMessages = conversationIds.length > 0 ? await prisma.message.findMany({
-          where: {
-            conversationId: { in: conversationIds },
-            senderType: 'agent',
-            senderId: agent.userId || agent.id
-          },
-          select: {
-            id: true,
-            conversationId: true,
-            createdAt: true
-          },
-          orderBy: {
-            createdAt: 'desc'
-          }
-        }) : [];
+          // Calculate average response time using messages already loaded
+          let totalResponseTime = 0;
+          let responseCount = 0;
 
-        // Calculate average response time (in minutes)
-        // Optimize by getting all customer messages at once
-        let totalResponseTime = 0;
-        let responseCount = 0;
-        
-        if (agentMessages.length > 0 && conversationIds.length > 0) {
-          // Get all customer messages for these conversations in one query
-          const allCustomerMessages = await prisma.message.findMany({
-            where: {
-              conversationId: { in: conversationIds },
-              senderType: 'customer'
-            },
-            select: {
-              id: true,
-              conversationId: true,
-              createdAt: true
-            },
-            orderBy: {
-              createdAt: 'asc'
-            }
-          });
+          assignedConversations.forEach(ticket => {
+            if (ticket.messages && ticket.messages.length > 0) {
+              const firstCustomerMsg = ticket.messages.find(m => m.senderType === 'customer');
+              const firstAgentReply = ticket.messages.find(m => m.senderType === 'agent' || m.senderType === 'admin');
 
-          // Group customer messages by conversation
-          const customerMessagesByConv = {};
-          allCustomerMessages.forEach(msg => {
-            if (!customerMessagesByConv[msg.conversationId]) {
-              customerMessagesByConv[msg.conversationId] = [];
-            }
-            customerMessagesByConv[msg.conversationId].push(msg);
-          });
+              if (firstCustomerMsg && firstAgentReply) {
+                const responseTime = new Date(firstAgentReply.createdAt) - new Date(firstCustomerMsg.createdAt);
+                const responseTimeMinutes = responseTime / 60000;
 
-          // For each agent message, find the preceding customer message
-          for (const agentMsg of agentMessages) {
-            const customerMessages = customerMessagesByConv[agentMsg.conversationId] || [];
-            // Find the most recent customer message before this agent message
-            const precedingCustomerMsg = customerMessages
-              .filter(cm => new Date(cm.createdAt) < new Date(agentMsg.createdAt))
-              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-            
-            if (precedingCustomerMsg) {
-              const responseTimeMs = new Date(agentMsg.createdAt) - new Date(precedingCustomerMsg.createdAt);
-              const responseTimeMinutes = responseTimeMs / (1000 * 60);
-              
-              // Only count reasonable response times (less than 7 days)
-              if (responseTimeMinutes > 0 && responseTimeMinutes < 7 * 24 * 60) {
-                totalResponseTime += responseTimeMinutes;
-                responseCount++;
+                if (responseTimeMinutes > 0 && responseTimeMinutes < 7 * 24 * 60) {
+                  totalResponseTime += responseTime;
+                  responseCount++;
+                }
               }
             }
-          }
-        }
-        
-        const avgResponseTime = responseCount > 0 
-          ? Math.round(totalResponseTime / responseCount) 
-          : 0;
+          });
 
-        // Determine last active time
-        // Use the most recent message, conversation update, or agent creation/update
-        let lastActive = agent.updatedAt || agent.createdAt;
-        
-        if (agentMessages.length > 0) {
-          const lastMessageTime = new Date(agentMessages[0].createdAt);
-          if (lastMessageTime > new Date(lastActive)) {
-            lastActive = agentMessages[0].createdAt;
-          }
-        }
-        
-        if (assignedConversations.length > 0) {
-          const lastConvUpdate = assignedConversations
-            .map(c => c.updatedAt || c.lastMessageAt || c.createdAt)
-            .filter(Boolean)
-            .sort((a, b) => new Date(b) - new Date(a))[0];
-          
-          if (lastConvUpdate && new Date(lastConvUpdate) > new Date(lastActive)) {
-            lastActive = lastConvUpdate;
-          }
-        }
+          const avgResponseTime = responseCount > 0
+            ? Math.round(totalResponseTime / responseCount / 60000)
+            : 0;
 
-        // Determine online status (active in last 15 minutes) - fallback calculation
-        const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-        const isOnlineByActivity = new Date(lastActive) > fifteenMinutesAgo;
-        
-        // Use presenceStatus from database, fallback to calculated status
-        const presenceStatus = agent.presenceStatus || (isOnlineByActivity ? 'online' : 'offline');
-        const isOnline = presenceStatus === 'online';
+          // Determine last active time
+          // Use the most recent message, conversation update, or agent creation/update
+          let lastActive = agent.updatedAt || agent.createdAt;
 
-        // Calculate customer rating based on resolved tickets and response time
-        // Since there's no rating system in the schema, we'll use a calculated value
-        let customerRating = '0.0';
-        if (resolvedTickets > 0 || avgResponseTime > 0) {
-          // Base rating: 3.5 + bonus for resolved tickets and fast response
-          let rating = 3.5;
-          if (resolvedTickets > 0) {
-            rating += Math.min((resolvedTickets / 100) * 1.0, 1.0); // Max 1.0 bonus
+          // Use messages from conversations for last active
+          const allMessages = assignedConversations.flatMap(c => c.messages || []);
+          if (allMessages.length > 0) {
+            const sortedMessages = allMessages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const lastMessageTime = new Date(sortedMessages[0].createdAt);
+            if (lastMessageTime > new Date(lastActive)) {
+              lastActive = sortedMessages[0].createdAt;
+            }
           }
-          if (avgResponseTime > 0 && avgResponseTime < 60) {
-            rating += Math.min((60 - avgResponseTime) / 60 * 0.5, 0.5); // Max 0.5 bonus for fast responses
+
+          if (assignedConversations.length > 0) {
+            const lastConvUpdate = assignedConversations
+              .map(c => c.updatedAt || c.lastMessageAt || c.createdAt)
+              .filter(Boolean)
+              .sort((a, b) => new Date(b) - new Date(a))[0];
+
+            if (lastConvUpdate && new Date(lastConvUpdate) > new Date(lastActive)) {
+              lastActive = lastConvUpdate;
+            }
           }
-          customerRating = Math.min(rating, 5.0).toFixed(1);
-        }
 
-        // Parse skills if they exist
-        let skills = [];
-        if (agent.skills) {
-          try {
-            skills = typeof agent.skills === 'string' ? JSON.parse(agent.skills) : agent.skills;
-            if (!Array.isArray(skills)) skills = [];
-          } catch (e) {
-            skills = [];
+          // Determine online status (active in last 15 minutes) - fallback calculation
+          const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+          const isOnlineByActivity = new Date(lastActive) > fifteenMinutesAgo;
+
+          // Use presenceStatus from database, fallback to calculated status
+          const presenceStatus = agent.presenceStatus || (isOnlineByActivity ? 'online' : 'offline');
+          const isOnline = presenceStatus === 'online' || isOnlineByActivity;
+
+          // Calculate customer rating based on resolved tickets and response time
+          // Since there's no rating system in the schema, we'll use a calculated value
+          let customerRating = '0.0';
+          if (resolvedTickets > 0 || avgResponseTime > 0) {
+            // Base rating: 3.5 + bonus for resolved tickets and fast response
+            let rating = 3.5;
+            if (resolvedTickets > 0) {
+              rating += Math.min((resolvedTickets / 100) * 1.0, 1.0); // Max 1.0 bonus
+            }
+            if (avgResponseTime > 0 && avgResponseTime < 60) {
+              rating += Math.min((60 - avgResponseTime) / 60 * 0.5, 0.5); // Max 0.5 bonus for fast responses
+            }
+            customerRating = Math.min(rating, 5.0).toFixed(1);
           }
-        }
 
-        const resolvedRole = agent.role || agent.account?.role || null;
+          // Parse skills if they exist
+          let skills = [];
+          if (agent.skills) {
+            try {
+              skills = typeof agent.skills === 'string' ? JSON.parse(agent.skills) : agent.skills;
+              if (!Array.isArray(skills)) skills = [];
+            } catch (e) {
+              skills = [];
+            }
+          }
 
-        return {
-          id: agent.id,
-          slug: agent.slug || `agent-${agent.id.substring(0, 8)}`,
-          name: agent.name,
-          email: agent.email,
-          userId: agent.userId,
-          accountId: agent.accountId || null,
-          departmentId: agent.departmentId,
-          roleId: resolvedRole?.id || agent.roleId || agent.account?.roleId || null,
-          role: resolvedRole,
-          account: agent.account
-            ? {
+          const resolvedRole = agent.role || agent.account?.role || null;
+
+          return {
+            id: agent.id,
+            slug: agent.slug || `agent-${agent.id.substring(0, 8)}`,
+            name: agent.name,
+            email: agent.email,
+            userId: agent.userId,
+            accountId: agent.accountId || null,
+            departmentId: agent.departmentId,
+            roleId: resolvedRole?.id || agent.roleId || agent.account?.roleId || null,
+            role: resolvedRole,
+            account: agent.account
+              ? {
                 id: agent.account.id,
                 name: agent.account.name,
                 email: agent.account.email,
@@ -329,29 +277,32 @@ export default async function handler(req, res) {
                 roleId: agent.account.roleId,
                 role: agent.account.role
               }
-            : null,
-          skills: skills,
-          department: agent.department
-            ? {
+              : null,
+            skills: skills,
+            department: agent.department
+              ? {
                 id: agent.department.id,
                 name: agent.department.name,
                 isActive: agent.department.isActive
               }
-            : null,
-          isActive: agent.isActive !== undefined ? agent.isActive : true,
-          maxLoad: agent.maxLoad,
-          presenceStatus: presenceStatus || 'offline',
-          lastSeenAt: agent.lastSeenAt ? agent.lastSeenAt.toISOString() : null,
-          isOnline,
-          lastActive: lastActive instanceof Date ? lastActive.toISOString() : lastActive,
-          ticketCount: agent._count.assignedConversations,
-          status: presenceStatus || 'offline', // Use presenceStatus instead of calculated status
-          performance: {
-            ticketsResolved: resolvedTickets,
-            avgResponseTime,
-            customerRating
-          }
-        };
+              : null,
+            isActive: agent.isActive !== undefined ? agent.isActive : true,
+            maxLoad: agent.maxLoad,
+            presenceStatus: presenceStatus || 'offline',
+            lastSeenAt: agent.lastSeenAt ? agent.lastSeenAt.toISOString() : null,
+            isOnline,
+            lastActive: lastActive instanceof Date ? lastActive.toISOString() : lastActive,
+            ticketCount: agent._count.assignedConversations,
+            status: presenceStatus || 'offline', // Use presenceStatus instead of calculated status
+            leaveStatus: agent.status || 'ACTIVE', // Leave status: ACTIVE or ON_LEAVE
+            leaveFrom: agent.leaveFrom,
+            leaveTo: agent.leaveTo,
+            performance: {
+              ticketsResolved: resolvedTickets,
+              avgResponseTime,
+              customerRating
+            }
+          };
         } catch (agentError) {
           console.error(`Error transforming agent ${agent.id}:`, agentError);
           // Return a basic agent object if transformation fails
@@ -376,6 +327,9 @@ export default async function handler(req, res) {
             lastActive: agent.updatedAt || agent.createdAt,
             ticketCount: agent._count?.assignedConversations || 0,
             status: 'offline',
+            leaveStatus: agent.status || 'ACTIVE', // Leave status: ACTIVE or ON_LEAVE
+            leaveFrom: agent.leaveFrom,
+            leaveTo: agent.leaveTo,
             performance: {
               ticketsResolved: 0,
               avgResponseTime: 0,
@@ -403,27 +357,27 @@ export default async function handler(req, res) {
 
     } catch (error) {
       console.error('Error fetching agents:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: 'Internal server error',
         error: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
-  } 
+  }
   else if (req.method === 'POST') {
     // Check permission to create agents
     if (userId) {
       const hasAccess = await checkPermissionOrFail(userId, 'admin.agents.create', res);
       if (!hasAccess) return;
     }
-    
+
     try {
       const { name, email, userId: agentUserId, departmentId, roleId, skills, maxLoad, isActive } = req.body;
 
       // Validate required fields
       if (!name || !email) {
-        return res.status(400).json({ 
-          message: 'Name and email are required' 
+        return res.status(400).json({
+          message: 'Name and email are required'
         });
       }
 
@@ -435,8 +389,8 @@ export default async function handler(req, res) {
       });
 
       if (existingAgent) {
-        return res.status(409).json({ 
-          message: 'An agent with this email already exists' 
+        return res.status(409).json({
+          message: 'An agent with this email already exists'
         });
       }
 
@@ -446,8 +400,8 @@ export default async function handler(req, res) {
           where: { id: departmentId }
         });
         if (!department) {
-          return res.status(400).json({ 
-            message: 'Invalid department ID' 
+          return res.status(400).json({
+            message: 'Invalid department ID'
           });
         }
       }
@@ -458,14 +412,39 @@ export default async function handler(req, res) {
           where: { id: roleId }
         });
         if (!role) {
-          return res.status(400).json({ 
-            message: 'Invalid role ID' 
+          return res.status(400).json({
+            message: 'Invalid role ID'
           });
         }
       }
 
-      // Generate unique slug from agent name
-      const baseSlug = generateSlug(name);
+      // Generate unique slug from agent name (preferred) or email (fallback)
+      let baseSlug = generateSlug(name);
+
+      // If name doesn't generate a good slug, try email
+      if (!baseSlug || baseSlug.length < 2) {
+        if (email) {
+          // Extract name from email (e.g., arshiyawzatco@outlook.com -> arshiya)
+          const emailName = email.split('@')[0];
+          // Remove common suffixes like 'wzatco', 'wzat', 'co'
+          const cleanEmailName = emailName.replace(/wzatco|wzat|co/gi, '').trim();
+          if (cleanEmailName.length >= 2) {
+            baseSlug = generateSlug(cleanEmailName);
+          } else {
+            // If cleaning removes too much, use the original email name
+            baseSlug = generateSlug(emailName);
+          }
+        }
+      }
+
+      // Ensure we have a valid slug
+      if (!baseSlug || baseSlug.length < 2) {
+        return res.status(400).json({
+          message: 'Cannot generate a valid slug from name or email. Please provide a valid name or email.'
+        });
+      }
+
+      // Generate unique slug (will append numbers if duplicate)
       const slug = await generateUniqueSlug(
         baseSlug,
         async (slugToCheck) => {
@@ -476,50 +455,26 @@ export default async function handler(req, res) {
         }
       );
 
-      // Generate unique userId if not provided
-      let generatedUserId = userId;
+      // Generate human-friendly userId from slug (append numbers if needed)
+      let generatedUserId = agentUserId;  // Use agentUserId from request body, not logged-in userId
       if (!generatedUserId) {
-        // Generate userId in format: AGENT-{YYMM}-{SEQ}
-        const now = new Date();
-        const year = now.getFullYear().toString().slice(-2);
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const yymm = `${year}${month}`;
-        
-        // Find the last agent with this pattern
-        const lastAgent = await prisma.agent.findFirst({
-          where: {
-            userId: {
-              startsWith: `AGENT-${yymm}-`
+        const baseUserId = slug;
+        let uniqueUserId = baseUserId;
+        let counter = 1;
+
+        // Ensure uniqueness
+        while (true) {
+          const existing = await prisma.agent.findFirst({
+            where: {
+              userId: uniqueUserId
             }
-          },
-          orderBy: {
-            userId: 'desc'
-          }
-        });
-        
-        let sequence = 1;
-        if (lastAgent && lastAgent.userId) {
-          const lastSeq = parseInt(lastAgent.userId.split('-').pop() || '0', 10);
-          sequence = lastSeq + 1;
-        }
-        
-        generatedUserId = `AGENT-${yymm}-${String(sequence).padStart(4, '0')}`;
-        
-        // Ensure uniqueness (in case of race condition)
-        let isUnique = false;
-        let attempts = 0;
-        while (!isUnique && attempts < 10) {
-          const existing = await prisma.agent.findUnique({
-            where: { userId: generatedUserId }
           });
-          if (!existing) {
-            isUnique = true;
-          } else {
-            sequence++;
-            generatedUserId = `AGENT-${yymm}-${String(sequence).padStart(4, '0')}`;
-            attempts++;
-          }
+          if (!existing) break;
+          uniqueUserId = `${baseUserId}-${counter}`;
+          counter++;
         }
+
+        generatedUserId = uniqueUserId;
       }
 
       // Parse skills if provided (should be JSON string)
@@ -633,17 +588,34 @@ export default async function handler(req, res) {
         }
       });
 
+      // Generate password reset token for initial password setup
+      let passwordSetupToken = null;
+      let passwordSetupLink = null;
+
+      if (account && !account.password) {
+        try {
+          const { setPasswordResetToken } = await import('../../../../lib/utils/password-reset');
+          passwordSetupToken = await setPasswordResetToken(prisma, account.id, 72); // 72 hours expiry
+
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+          passwordSetupLink = `${baseUrl}/agent/set-password/${passwordSetupToken}`;
+        } catch (tokenError) {
+          console.error('Error generating password reset token:', tokenError);
+          // Continue without token - agent can request password reset later
+        }
+      }
+
       // Send welcome email to the new agent
       try {
         const { sendEmail } = await import('../../../../lib/email/service');
         const { agentWelcomeTemplate } = await import('../../../../lib/email/templates');
-        
+
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-        const loginLink = `${baseUrl}/agent/login`; // Adjust this to your actual agent login URL
-        
+        const loginLink = `${baseUrl}/agent/login`;
+
         // Get admin name from request headers if available
         const adminName = req.headers['x-user-name'] || 'Administrator';
-        
+
         const emailHtml = await agentWelcomeTemplate({
           agentName: newAgent.name,
           agentEmail: newAgent.email,
@@ -651,13 +623,14 @@ export default async function handler(req, res) {
           departmentName: newAgent.department?.name || null,
           roleName: newAgent.role?.title || null,
           loginLink: loginLink,
+          passwordSetupLink: passwordSetupLink, // Add password setup link
           adminName: adminName
         });
 
         // Send email asynchronously (don't wait for it to complete)
         sendEmail({
           to: newAgent.email,
-          subject: `Welcome to the Team - Your Agent Account is Ready`,
+          subject: `Welcome to the Team - Set Up Your Agent Account`,
           html: emailHtml
         }).catch(error => {
           console.error('Failed to send welcome email to agent:', error);
@@ -668,7 +641,7 @@ export default async function handler(req, res) {
         // Don't fail agent creation if email fails
       }
 
-      res.status(201).json({ 
+      res.status(201).json({
         message: 'Agent created successfully',
         agent: {
           id: newAgent.id,
@@ -686,7 +659,7 @@ export default async function handler(req, res) {
 
     } catch (error) {
       console.error('Error creating agent:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: 'Internal server error',
         error: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined

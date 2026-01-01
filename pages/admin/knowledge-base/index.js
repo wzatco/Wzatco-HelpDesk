@@ -33,8 +33,11 @@ import {
 } from 'lucide-react';
 import RichTextEditor from '../../../components/ui/RichTextEditor';
 import ThemedSelect from '../../../components/ui/ThemedSelect';
+import ArticleBuilder from '../../../components/admin/article-builder/ArticleBuilder';
 
 import { withAuth } from '../../../lib/withAuth';
+import { blocksToPlainText, isBlocksContent } from '../../../utils/blockRenderer';
+
 export default function KnowledgeBasePage() {
   const router = useRouter();
   const { status } = router.query;
@@ -63,6 +66,8 @@ export default function KnowledgeBasePage() {
   const [isMounted, setIsMounted] = useState(false);
   const [viewMode, setViewMode] = useState('grid'); // grid or list
   const [htmlPreview, setHtmlPreview] = useState({ show: false, content: '', title: '' });
+  const [useBlockBuilder, setUseBlockBuilder] = useState(false);
+  const [articleBlocks, setArticleBlocks] = useState([]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -136,6 +141,17 @@ export default function KnowledgeBasePage() {
 
     try {
       setSubmitting(true);
+      
+      // If using block builder, convert blocks to content
+      let content = formData.content.trim() || '';
+      let contentType = formData.isHtml ? 'html' : 'richtext';
+      
+      if (useBlockBuilder && articleBlocks.length > 0) {
+        // Store blocks as JSON in content field
+        contentType = 'blocks';
+        content = JSON.stringify(articleBlocks);
+      }
+
       const response = await fetch('/api/admin/knowledge-base/articles', {
         method: 'POST',
         headers: {
@@ -143,8 +159,8 @@ export default function KnowledgeBasePage() {
         },
         body: JSON.stringify({
           title: formData.title.trim(),
-          content: formData.content.trim() || '',
-          contentType: formData.isHtml ? 'html' : 'richtext',
+          content: content,
+          contentType: contentType,
           category: formData.category || null,
           status: formData.status,
           tags: formData.tags,
@@ -159,6 +175,8 @@ export default function KnowledgeBasePage() {
         setShowAddModal(false);
         setFormData({ title: '', content: '', category: '', status: 'draft', tags: [], isPublic: true, isHtml: false });
         setTagInput('');
+        setArticleBlocks([]);
+        setUseBlockBuilder(false);
         await fetchArticles();
       } else {
         showNotification('error', data.message || 'Failed to create article');
@@ -180,6 +198,17 @@ export default function KnowledgeBasePage() {
 
     try {
       setSubmitting(true);
+      
+      // If using block builder, convert blocks to content
+      let content = formData.content.trim() || '';
+      let contentType = formData.isHtml ? 'html' : 'richtext';
+      
+      if (useBlockBuilder && articleBlocks.length > 0) {
+        // Store blocks as JSON in content field
+        contentType = 'blocks';
+        content = JSON.stringify(articleBlocks);
+      }
+
       const response = await fetch(`/api/admin/knowledge-base/articles/${selectedArticle.id}`, {
         method: 'PATCH',
         headers: {
@@ -187,8 +216,8 @@ export default function KnowledgeBasePage() {
         },
         body: JSON.stringify({
           title: formData.title.trim(),
-          content: formData.content.trim() || '',
-          contentType: formData.isHtml ? 'html' : 'richtext',
+          content: content,
+          contentType: contentType,
           category: formData.category || null,
           status: formData.status,
           tags: formData.tags,
@@ -204,6 +233,9 @@ export default function KnowledgeBasePage() {
         setSelectedArticle(null);
         setFormData({ title: '', content: '', category: '', status: 'draft', tags: [], isPublic: true, isHtml: false });
         setTagInput('');
+        setArticleBlocks([]);
+        setUseBlockBuilder(false);
+        setUseBlockBuilder(false);
         await fetchArticles();
       } else {
         showNotification('error', data.message || 'Failed to update article');
@@ -513,7 +545,15 @@ export default function KnowledgeBasePage() {
                         </div>
                         {article.content && (
                           <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-3 mb-3">
-                            {article.content.replace(/<[^>]*>/g, '').substring(0, 120)}...
+                            {(() => {
+                              // Check if content is blocks format and convert to plain text
+                              if (isBlocksContent(article.content, article.contentType)) {
+                                const plainText = blocksToPlainText(article.content);
+                                return plainText.substring(0, 120) + (plainText.length > 120 ? '...' : '');
+                              }
+                              // Strip HTML if present
+                              return article.content.replace(/<[^>]*>/g, '').substring(0, 120) + '...';
+                            })()}
                           </p>
                         )}
                       </div>
@@ -617,7 +657,15 @@ export default function KnowledgeBasePage() {
                         </div>
                         {article.content && (
                           <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 ml-8 mb-3">
-                            {article.content.replace(/<[^>]*>/g, '').substring(0, 200)}...
+                            {(() => {
+                              // Check if content is blocks format and convert to plain text
+                              if (isBlocksContent(article.content, article.contentType)) {
+                                const plainText = blocksToPlainText(article.content);
+                                return plainText.substring(0, 200) + (plainText.length > 200 ? '...' : '');
+                              }
+                              // Strip HTML if present
+                              return article.content.replace(/<[^>]*>/g, '').substring(0, 200) + '...';
+                            })()}
                           </p>
                         )}
                         <div className="flex items-center gap-4 ml-8 text-xs text-slate-500 dark:text-slate-400">
@@ -702,6 +750,7 @@ export default function KnowledgeBasePage() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={closeHtmlPreview}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
               >
@@ -742,10 +791,13 @@ export default function KnowledgeBasePage() {
             <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">Add New Article</h2>
               <button
+                type="button"
                 onClick={() => {
                   setShowAddModal(false);
                   setFormData({ title: '', content: '', category: '', status: 'draft', tags: [], isPublic: true, isHtml: false });
                   setTagInput('');
+                  setArticleBlocks([]);
+                  setUseBlockBuilder(false);
                 }}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
               >
@@ -782,17 +834,42 @@ export default function KnowledgeBasePage() {
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                       Content
                     </label>
-                      <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                        <span>HTML Mode</span>
-                        <input
-                          type="checkbox"
-                          checked={formData.isHtml}
-                          onChange={(e) => setFormData({ ...formData, isHtml: e.target.checked, content: '' })}
-                          className="h-4 w-4 accent-violet-600"
-                        />
+                      <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={useBlockBuilder}
+                            onChange={(e) => {
+                              setUseBlockBuilder(e.target.checked);
+                              if (e.target.checked) {
+                                setFormData({ ...formData, isHtml: false });
+                              }
+                            }}
+                            className="h-4 w-4 accent-violet-600"
+                          />
+                          <span>Block Builder</span>
+                        </label>
+                        {!useBlockBuilder && (
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.isHtml}
+                              onChange={(e) => setFormData({ ...formData, isHtml: e.target.checked, content: '' })}
+                              className="h-4 w-4 accent-violet-600"
+                            />
+                            <span>HTML Mode</span>
+                          </label>
+                        )}
                       </div>
                     </div>
-                     {formData.isHtml ? (
+                    {useBlockBuilder ? (
+                      <div className="border border-violet-200 dark:border-slate-700 rounded-xl overflow-hidden" style={{ height: '600px' }}>
+                        <ArticleBuilder
+                          initialBlocks={articleBlocks}
+                          onBlocksChange={setArticleBlocks}
+                        />
+                      </div>
+                    ) : formData.isHtml ? (
                        <>
                          <textarea
                            value={formData.content}
@@ -1004,6 +1081,8 @@ export default function KnowledgeBasePage() {
                   setSelectedArticle(null);
                   setFormData({ title: '', content: '', category: '', status: 'draft', tags: [], isPublic: true, isHtml: false });
                   setTagInput('');
+                  setArticleBlocks([]);
+                  setUseBlockBuilder(false);
                 }}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
               >
@@ -1040,17 +1119,42 @@ export default function KnowledgeBasePage() {
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                       Content
                     </label>
-                      <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                        <span>HTML Mode</span>
-                        <input
-                          type="checkbox"
-                          checked={formData.isHtml}
-                          onChange={(e) => setFormData({ ...formData, isHtml: e.target.checked, content: '' })}
-                          className="h-4 w-4 accent-violet-600"
-                        />
+                      <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={useBlockBuilder}
+                            onChange={(e) => {
+                              setUseBlockBuilder(e.target.checked);
+                              if (e.target.checked) {
+                                setFormData({ ...formData, isHtml: false });
+                              }
+                            }}
+                            className="h-4 w-4 accent-violet-600"
+                          />
+                            <span>Block Builder</span>
+                        </label>
+                        {!useBlockBuilder && (
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.isHtml}
+                              onChange={(e) => setFormData({ ...formData, isHtml: e.target.checked, content: '' })}
+                              className="h-4 w-4 accent-violet-600"
+                            />
+                            <span>HTML Mode</span>
+                          </label>
+                        )}
                       </div>
                     </div>
-                     {formData.isHtml ? (
+                    {useBlockBuilder ? (
+                      <div className="border border-violet-200 dark:border-slate-700 rounded-xl overflow-hidden" style={{ height: '600px' }}>
+                        <ArticleBuilder
+                          initialBlocks={articleBlocks}
+                          onBlocksChange={setArticleBlocks}
+                        />
+                      </div>
+                    ) : formData.isHtml ? (
                        <>
                          <textarea
                            value={formData.content}
@@ -1311,5 +1415,6 @@ export default function KnowledgeBasePage() {
 }
 
 export const getServerSideProps = withAuth();
+
 
 

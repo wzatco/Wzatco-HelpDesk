@@ -64,7 +64,7 @@ export default async function handler(req, res) {
       try {
         // Update ticket status to closed
         await prisma.conversation.update({
-          where: { id: ticket.id },
+          where: { ticketNumber: ticket.ticketNumber },
           data: {
             status: 'closed',
             updatedAt: new Date()
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
         // Create activity log
         await prisma.ticketActivity.create({
           data: {
-            conversationId: ticket.id,
+            conversationId: ticket.ticketNumber,
             activityType: 'status_changed',
             oldValue: ticket.status,
             newValue: 'closed',
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
         // Add closing message as a system message
         await prisma.message.create({
           data: {
-            conversationId: ticket.id,
+            conversationId: ticket.ticketNumber,
             senderId: 'system',
             senderType: 'system',
             content: closingMessage,
@@ -102,20 +102,20 @@ export default async function handler(req, res) {
         // Send notification
         try {
           await notifyStatusChange(prisma, {
-            ticketId: ticket.id,
-            ticketSubject: ticket.subject || ticket.id,
+            ticketId: ticket.ticketNumber,
+            ticketSubject: ticket.subject || ticket.ticketNumber,
             oldStatus: ticket.status,
             newStatus: 'closed',
             changedBy: 'Auto-Close System',
             userId: ticket.assigneeId || null
           });
         } catch (notifError) {
-          console.error(`Error sending notification for auto-closed ticket ${ticket.id}:`, notifError);
+          console.error(`Error sending notification for auto-closed ticket ${ticket.ticketNumber}:`, notifError);
         }
 
         closedCount++;
       } catch (error) {
-        console.error(`Error auto-closing ticket ${ticket.id}:`, error);
+        console.error(`Error auto-closing ticket ${ticket.ticketNumber}:`, error);
         // Continue with other tickets even if one fails
       }
     }

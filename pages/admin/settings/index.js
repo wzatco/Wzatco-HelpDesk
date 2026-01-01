@@ -5,7 +5,7 @@ import NotificationToast from '../../../components/ui/NotificationToast';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
-import { Settings, Save, CheckCircle, AlertCircle, Loader2, Shield, Brain, Key, Eye, EyeOff, Upload, X, Ticket, Bell, Lock } from 'lucide-react';
+import { Settings, Save, CheckCircle, AlertCircle, Loader2, Shield, Brain, Key, Eye, EyeOff, Upload, X, Ticket, Bell, Lock, Plug2 } from 'lucide-react';
 
 import { withAuth } from '../../../lib/withAuth';
 export default function SettingsPage() {
@@ -79,6 +79,19 @@ export default function SettingsPage() {
     dosProtection: true,
     spamEmailBlocklist: []
   });
+  const [integrationSettings, setIntegrationSettings] = useState({
+    googleClientId: '',
+    googleClientSecret: '',
+    isGoogleAuthEnabled: false,
+    aiApiKey: '',
+    aiProvider: 'openai',
+    isAiEnabled: false
+  });
+  const [showIntegrationKeys, setShowIntegrationKeys] = useState({
+    googleClientId: false,
+    googleClientSecret: false,
+    aiApiKey: false
+  });
   const [newSpamEmail, setNewSpamEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -141,7 +154,8 @@ export default function SettingsPage() {
       'file-upload-settings',
       'ticket-settings',
       'notification-settings',
-      'security-settings'
+      'security-settings',
+      'integrations-settings'
     ];
 
     const observerOptions = {
@@ -317,6 +331,14 @@ export default function SettingsPage() {
       
       if (securityData.success) {
         setSecuritySettings(securityData.settings);
+      }
+
+      // Fetch integration settings
+      const integrationResponse = await fetch('/api/admin/settings/integrations');
+      const integrationData = await integrationResponse.json();
+      
+      if (integrationData.success) {
+        setIntegrationSettings(integrationData.settings);
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -557,6 +579,41 @@ export default function SettingsPage() {
     } catch (error) {
       console.error('Error saving security settings:', error);
       showNotification('error', 'An error occurred while saving security settings');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const saveIntegrationSettings = async () => {
+    setSavingSection('integrations');
+    try {
+      const response = await fetch('/api/admin/settings/integrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          googleClientId: integrationSettings.googleClientId,
+          googleClientSecret: integrationSettings.googleClientSecret,
+          isGoogleAuthEnabled: integrationSettings.isGoogleAuthEnabled,
+          aiApiKey: integrationSettings.aiApiKey,
+          aiProvider: integrationSettings.aiProvider,
+          isAiEnabled: integrationSettings.isAiEnabled
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('success', 'Integration settings saved successfully');
+        // Refresh settings to get masked keys
+        const integrationResponse = await fetch('/api/admin/settings/integrations');
+        const integrationData = await integrationResponse.json();
+        if (integrationData.success) {
+          setIntegrationSettings(integrationData.settings);
+        }
+      } else {
+        showNotification('error', data.message || 'Failed to save integration settings');
+      }
+    } catch (error) {
+      console.error('Error saving integration settings:', error);
+      showNotification('error', 'An error occurred while saving integration settings');
     } finally {
       setSavingSection(null);
     }
@@ -2140,6 +2197,251 @@ export default function SettingsPage() {
                           <span>Auto-saved</span>
                         </>
                       )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Integrations Settings */}
+              <Card id="integrations-settings" className="border-0 shadow-xl dark:bg-slate-800 bg-white rounded-2xl mt-6 scroll-mt-6">
+                <CardHeader className="border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-3">
+                    <Plug2 className="w-6 h-6 text-violet-600 dark:text-violet-400" />
+                    <CardTitle className="text-xl font-bold text-slate-900 dark:text-white">Integrations</CardTitle>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
+                    Manage Google Authentication and AI Assistant integrations
+                  </p>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-8">
+                    {/* Google Authentication Section */}
+                    <div className="p-6 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center shadow-md">
+                          <svg className="w-6 h-6" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Google Authentication</h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-400">Allow widget users to sign in with Google</p>
+                        </div>
+                      </div>
+
+                      {/* Enable Google Auth Toggle */}
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-blue-200 dark:border-slate-600 mb-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Enable Google Login
+                          </label>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Allow customers to authenticate using their Google account
+                          </p>
+                        </div>
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={integrationSettings.isGoogleAuthEnabled}
+                              onChange={(e) => setIntegrationSettings({ ...integrationSettings, isGoogleAuthEnabled: e.target.checked })}
+                              className="sr-only"
+                            />
+                            <div className={`w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${
+                              integrationSettings.isGoogleAuthEnabled
+                                ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30' 
+                                : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
+                            }`}>
+                              {integrationSettings.isGoogleAuthEnabled && (
+                                <svg className="w-3.5 h-3.5 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path d="M5 13l4 4L19 7"></path>
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Google Client ID */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                          Google Client ID
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type={showIntegrationKeys.googleClientId ? 'text' : 'password'}
+                            value={integrationSettings.googleClientId}
+                            onChange={(e) => setIntegrationSettings({ ...integrationSettings, googleClientId: e.target.value })}
+                            className="w-full h-11 pr-12 rounded-xl border-blue-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-sm"
+                            placeholder="Enter Google OAuth Client ID"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowIntegrationKeys({ ...showIntegrationKeys, googleClientId: !showIntegrationKeys.googleClientId })}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                          >
+                            {showIntegrationKeys.googleClientId ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Get this from Google Cloud Console → APIs & Services → Credentials
+                        </p>
+                      </div>
+
+                      {/* Google Client Secret */}
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                          Google Client Secret
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type={showIntegrationKeys.googleClientSecret ? 'text' : 'password'}
+                            value={integrationSettings.googleClientSecret}
+                            onChange={(e) => setIntegrationSettings({ ...integrationSettings, googleClientSecret: e.target.value })}
+                            className="w-full h-11 pr-12 rounded-xl border-blue-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-sm"
+                            placeholder="Enter Google OAuth Client Secret"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowIntegrationKeys({ ...showIntegrationKeys, googleClientSecret: !showIntegrationKeys.googleClientSecret })}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                          >
+                            {showIntegrationKeys.googleClientSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Keep this secret secure and never share it publicly
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* AI Assistant Section */}
+                    <div className="p-6 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center shadow-md">
+                          <Brain className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-white">AI Assistant</h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-400">Configure AI-powered report analysis</p>
+                        </div>
+                      </div>
+
+                      {/* Enable AI Toggle */}
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-800/50 border border-purple-200 dark:border-slate-600 mb-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Enable AI Analysis
+                          </label>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Allow AI-powered insights and recommendations in reports
+                          </p>
+                        </div>
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={integrationSettings.isAiEnabled}
+                              onChange={(e) => setIntegrationSettings({ ...integrationSettings, isAiEnabled: e.target.checked })}
+                              className="sr-only"
+                            />
+                            <div className={`w-5 h-5 rounded-md border-2 transition-all duration-200 flex items-center justify-center ${
+                              integrationSettings.isAiEnabled
+                                ? 'bg-violet-600 border-violet-600 dark:bg-violet-500 dark:border-violet-500 shadow-md shadow-violet-500/30' 
+                                : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-violet-400 dark:group-hover:border-violet-500 group-hover:bg-violet-50 dark:group-hover:bg-violet-900/20'
+                            }`}>
+                              {integrationSettings.isAiEnabled && (
+                                <svg className="w-3.5 h-3.5 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path d="M5 13l4 4L19 7"></path>
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* AI Provider Selection */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                          AI Provider
+                        </label>
+                        <select
+                          value={integrationSettings.aiProvider}
+                          onChange={(e) => setIntegrationSettings({ ...integrationSettings, aiProvider: e.target.value })}
+                          className="w-full h-11 px-4 rounded-xl border border-purple-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        >
+                          <option value="openai">OpenAI (GPT-3.5 Turbo)</option>
+                          <option value="gemini">Google Gemini</option>
+                        </select>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Choose which AI service to use for analysis
+                        </p>
+                      </div>
+
+                      {/* AI API Key */}
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                          API Key
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type={showIntegrationKeys.aiApiKey ? 'text' : 'password'}
+                            value={integrationSettings.aiApiKey}
+                            onChange={(e) => setIntegrationSettings({ ...integrationSettings, aiApiKey: e.target.value })}
+                            className="w-full h-11 pr-12 rounded-xl border-purple-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-sm"
+                            placeholder={`Enter ${integrationSettings.aiProvider === 'openai' ? 'OpenAI' : 'Gemini'} API Key`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowIntegrationKeys({ ...showIntegrationKeys, aiApiKey: !showIntegrationKeys.aiApiKey })}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                          >
+                            {showIntegrationKeys.aiApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          {integrationSettings.aiProvider === 'openai' 
+                            ? 'Get your API key from platform.openai.com/api-keys'
+                            : 'Get your API key from Google AI Studio'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Save Button */}
+                    <div className="flex items-center justify-between pt-4">
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        {savingSection === 'integrations' ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="w-3 h-3 text-green-500" />
+                            <span>Changes saved</span>
+                          </>
+                        )}
+                      </div>
+                      <Button
+                        onClick={saveIntegrationSettings}
+                        disabled={savingSection === 'integrations'}
+                        className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all h-11 px-6 rounded-xl"
+                      >
+                        {savingSection === 'integrations' ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-2" />
+                            Save Integration Settings
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

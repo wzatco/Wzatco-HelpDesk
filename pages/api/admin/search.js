@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       if (looksLikeTicketId) {
         try {
           const directTicket = await prisma.conversation.findUnique({
-            where: { id: q.trim() },
+            where: { ticketNumber: q.trim() },
             include: {
               customer: {
                 select: {
@@ -97,22 +97,22 @@ export default async function handler(req, res) {
       });
 
       // Filter case-insensitively and avoid duplicates
-      const existingIds = new Set(tickets.map(t => t.id));
+      const existingIds = new Set(tickets.map(t => t.ticketNumber));
       const filteredTickets = allTickets.filter(ticket => {
         // Skip if already found by direct lookup
-        if (existingIds.has(ticket.id)) return false;
+        if (existingIds.has(ticket.ticketNumber)) return false;
         
         const subject = (ticket.subject || '').toLowerCase();
         const customerName = (ticket.customerName || '').toLowerCase();
-        const id = (ticket.id || '').toLowerCase();
-        return subject.includes(searchTerm) || customerName.includes(searchTerm) || id.includes(searchTerm);
+        const ticketNum = (ticket.ticketNumber || '').toLowerCase();
+        return subject.includes(searchTerm) || customerName.includes(searchTerm) || ticketNum.includes(searchTerm);
       });
       
       // Combine direct lookup results with filtered results, limit to 10
       tickets = [...tickets, ...filteredTickets].slice(0, 10);
 
       results.tickets = tickets.map(ticket => ({
-        id: ticket.id,
+        id: ticket.ticketNumber,
         subject: ticket.subject,
         status: ticket.status,
         priority: ticket.priority,

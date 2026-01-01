@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../../../lib/prisma';
 import { updateTATMetrics } from '@/lib/utils/tat';
 import { parseMentions, findUserByMention } from '@/lib/utils/mentions';
 import { notifyMention, notifyCustomerMessage, notifyFirstResponseCustomer } from '@/lib/utils/notifications';
@@ -12,12 +12,17 @@ export function setSocketIO(io) {
 
 // Helper to get Socket.IO instance
 function getSocketIO() {
-  // Socket.IO instance should be set via setSocketIO() from server.js
-  // This function is kept for compatibility but the instance must be set externally
+  if (!ioInstance && typeof require !== 'undefined') {
+    try {
+      // Try to get from server.js
+      const serverModule = require('../../../server');
+      // This won't work directly, so we'll use a different approach
+    } catch (e) {
+      // Ignore
+    }
+  }
   return ioInstance;
 }
-
-const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   const { id } = req.query;
@@ -37,9 +42,9 @@ export default async function handler(req, res) {
       // Get ticket settings to check anyStaffCanReply
       const ticketSettings = await getTicketSettings();
       
-      // Get conversation to check assignee
+      // Get conversation to check assignee (by ticketNumber)
       const conversation = await prisma.conversation.findUnique({
-        where: { id },
+        where: { ticketNumber: id },
         select: { assigneeId: true }
       });
 
@@ -80,7 +85,7 @@ export default async function handler(req, res) {
           content: content.trim(),
           senderId: actualSenderId,
           senderType: resolvedSender,
-          conversationId: id,
+          conversationId: id, // ticketNumber
           type: 'text',
           metadata: replyToId ? { replyTo: replyToId } : undefined
         },
@@ -127,32 +132,76 @@ export default async function handler(req, res) {
         }
       }
 
-      // Update conversation's lastMessageAt
+      // Update conversation's lastMessageAt (by ticketNumber)
       await prisma.conversation.update({
-        where: { id },
+        where: { ticketNumber: id },
         data: {
           lastMessageAt: new Date()
         }
       });
+
+      // Trigger webhook for message creation
+      try {
+        const { triggerWebhook } = await import('../../../../../lib/utils/webhooks');
+        const conversation = await prisma.conversation.findUnique({
+          where: { ticketNumber: id },
+          include: { customer: true, assignee: true }
+        });
+        await triggerWebhook('message.created', {
+          message: {
+            id: message.id,
+            content: message.content,
+            senderId: message.senderId,
+            senderType: message.senderType,
+            type: message.type,
+            createdAt: message.createdAt
+          },
+          ticket: {
+            ticketNumber: id,
+            subject: conversation?.subject,
+            status: conversation?.status,
+            priority: conversation?.priority
+          },
+          customer: conversation?.customer ? {
+            id: conversation.customer.id,
+            name: conversation.customer.name,
+            email: conversation.customer.email
+          } : null
+        });
+      } catch (webhookError) {
+        console.error('Error triggering message.created webhook:', webhookError);
+        // Don't fail message creation if webhook fails
+      }
 
       // Update TAT metrics if this is an agent/admin response (for first response time tracking)
       if (resolvedSender === 'agent' || resolvedSender === 'admin') {
         try {
           // Check if this is the first response before updating TAT
           const conversation = await prisma.conversation.findUnique({
-            where: { id },
+            where: { ticketNumber: id },
             include: { customer: true }
           });
 
           const isFirstResponse = !conversation?.firstResponseAt && conversation?.firstResponseTimeSeconds === null;
 
-          await updateTATMetrics(prisma, id);
+          await updateTATMetrics(prisma, id); // id is ticketNumber
+
+          // Stop response SLA timer if this is the first agent response
+          if (isFirstResponse) {
+            try {
+              const { SLAService } = await import('../../../../../lib/sla-service');
+              await SLAService.stopTimer(id, 'response'); // Stop only response timer, resolution continues
+            } catch (slaError) {
+              console.error('Error stopping response SLA timer:', slaError);
+              // Don't fail message creation if SLA stop fails
+            }
+          }
 
           // Send first response email to customer if this is the first response
           if (isFirstResponse && conversation?.customer?.email) {
             try {
               const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-              const ticketLink = `${baseUrl}/ticket/${id}`;
+              const ticketLink = `${baseUrl}/admin/tickets/${id}`; // id is ticketNumber
               
               // Get sender name
               let senderName = 'Admin';
@@ -175,7 +224,7 @@ export default async function handler(req, res) {
               }
 
               await notifyFirstResponseCustomer(prisma, {
-                ticketId: id,
+                ticketId: id, // ticketNumber
                 ticketSubject: conversation.subject || 'No subject',
                 customerEmail: conversation.customer.email,
                 customerName: conversation.customer.name || 'Customer',
@@ -199,7 +248,7 @@ export default async function handler(req, res) {
         // The socket handler will check activity and skip if agent is active
         try {
           const conversation = await prisma.conversation.findUnique({
-            where: { id },
+            where: { ticketNumber: id },
             include: { 
               customer: true,
               assignee: true
@@ -263,11 +312,11 @@ export default async function handler(req, res) {
           // The socket handler will check activity and skip if customer is active
           if (conversation.customer && conversation.customer.email) {
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-            const ticketLink = `${baseUrl}/ticket/${id}`;
+            const ticketLink = `${baseUrl}/admin/tickets/${id}`; // id is ticketNumber
             
             // Send email notification to customer (socket will check if customer is active)
             notifyCustomerMessage(prisma, {
-              ticketId: conversation.id,
+              ticketId: conversation.ticketNumber,
               ticketSubject: conversation.subject,
               customerEmail: conversation.customer.email,
               customerName: conversation.customer.name || 'Customer',
@@ -290,7 +339,7 @@ export default async function handler(req, res) {
                 if (user && user.id !== message.senderId) {
                   // Send mention notification
                   await notifyMention(prisma, {
-                    ticketId: conversation.id,
+                    ticketId: conversation.ticketNumber,
                     ticketSubject: conversation.subject,
                     mentionedUserId: user.id,
                     mentionedUserName: user.name,

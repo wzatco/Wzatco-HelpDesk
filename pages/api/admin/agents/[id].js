@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { generateSlug, generateUniqueSlug } from '../../../../lib/utils/slug';
+import bcrypt from 'bcryptjs';
+import { getCurrentUserId } from '@/lib/auth';
 
 const prisma = new PrismaClient();
 
@@ -8,6 +10,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
+      console.log('🔍 Agent API: Looking for agent with identifier:', id);
       // Try to find by slug first, then by id for backward compatibility
       let agent = await prisma.agent.findUnique({
         where: { slug: id },
@@ -48,13 +51,22 @@ export default async function handler(req, res) {
           },
           assignedConversations: {
             select: {
-              id: true,
+              ticketNumber: true,
               status: true,
               subject: true,
               priority: true,
               createdAt: true,
               updatedAt: true,
-              lastMessageAt: true
+              lastMessageAt: true,
+              messages: {
+                select: {
+                  senderType: true,
+                  createdAt: true
+                },
+                orderBy: {
+                  createdAt: 'asc'
+                }
+              }
             },
             orderBy: {
               updatedAt: 'desc'
@@ -65,6 +77,7 @@ export default async function handler(req, res) {
 
       // Fallback to ID lookup for backward compatibility
       if (!agent) {
+        console.log('🔍 Agent API: Slug not found, trying ID lookup:', id);
         agent = await prisma.agent.findUnique({
           where: { id },
           include: {
@@ -104,11 +117,20 @@ export default async function handler(req, res) {
             },
             assignedConversations: {
               select: {
-                id: true,
+                ticketNumber: true,
                 status: true,
                 subject: true,
                 createdAt: true,
-                updatedAt: true
+                updatedAt: true,
+                messages: {
+                  select: {
+                    senderType: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    createdAt: 'asc'
+                  }
+                }
               },
               orderBy: {
                 updatedAt: 'desc'
@@ -120,101 +142,114 @@ export default async function handler(req, res) {
       }
 
       if (!agent) {
-        return res.status(404).json({ message: 'Agent not found' });
+        console.log('❌ Agent API: Agent not found with slug or id:', id);
+
+        // Also try to find by userId if it matches (for old randomized user IDs)
+        const agentByUserId = await prisma.agent.findFirst({
+          where: { userId: id },
+          include: {
+            department: { select: { id: true, name: true, isActive: true } },
+            role: { select: { id: true, title: true, displayAs: true, hasSuperPower: true } },
+            account: { select: { id: true, name: true, email: true, status: true, type: true, roleId: true } },
+            assignedConversations: {
+              select: {
+                ticketNumber: true,
+                status: true,
+                subject: true,
+                priority: true,
+                createdAt: true,
+                updatedAt: true,
+                lastMessageAt: true,
+                messages: {
+                  select: {
+                    senderType: true,
+                    createdAt: true
+                  },
+                  orderBy: {
+                    createdAt: 'asc'
+                  }
+                }
+              },
+              orderBy: {
+                updatedAt: 'desc'
+              }
+            }
+          }
+        });
+
+        if (agentByUserId) {
+          console.log('✅ Agent API: Found agent by userId:', agentByUserId.userId);
+          agent = agentByUserId;
+        } else {
+          // Let's also check what agents exist in the database for debugging
+          const allAgents = await prisma.agent.findMany({
+            select: { id: true, slug: true, name: true, userId: true },
+            take: 20
+          });
+          console.log('📋 Agent API: Sample agents in DB:', JSON.stringify(allAgents, null, 2));
+
+          return res.status(404).json({
+            message: 'Agent not found',
+            searchedIdentifier: id,
+            availableAgents: allAgents.map(a => ({ id: a.id, slug: a.slug, name: a.name, userId: a.userId }))
+          });
+        }
       }
+
+      console.log('✅ Agent API: Found agent:', { id: agent.id, slug: agent.slug, name: agent.name });
 
       // Calculate performance metrics similar to the agents list endpoint
       const assignedConversations = agent.assignedConversations || [];
-      
+
       // Calculate tickets resolved
       const resolvedTickets = assignedConversations.filter(
         conv => conv.status === 'resolved' || conv.status === 'closed'
       ).length;
 
-      // Get all agent messages
-      const conversationIds = assignedConversations.map(c => c.id);
-      const agentMessages = conversationIds.length > 0 ? await prisma.message.findMany({
-        where: {
-          conversationId: { in: conversationIds },
-          senderType: 'agent',
-          senderId: agent.userId || agent.id
-        },
-        select: {
-          id: true,
-          conversationId: true,
-          createdAt: true
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      }) : [];
-
-      // Calculate average response time
+      // Calculate average response time using messages already loaded
       let totalResponseTime = 0;
       let responseCount = 0;
-      
-      if (agentMessages.length > 0 && conversationIds.length > 0) {
-        const allCustomerMessages = await prisma.message.findMany({
-          where: {
-            conversationId: { in: conversationIds },
-            senderType: 'customer'
-          },
-          select: {
-            id: true,
-            conversationId: true,
-            createdAt: true
-          },
-          orderBy: {
-            createdAt: 'asc'
-          }
-        });
 
-        const customerMessagesByConv = {};
-        allCustomerMessages.forEach(msg => {
-          if (!customerMessagesByConv[msg.conversationId]) {
-            customerMessagesByConv[msg.conversationId] = [];
-          }
-          customerMessagesByConv[msg.conversationId].push(msg);
-        });
+      assignedConversations.forEach(ticket => {
+        if (ticket.messages && ticket.messages.length > 0) {
+          const firstCustomerMsg = ticket.messages.find(m => m.senderType === 'customer');
+          const firstAgentReply = ticket.messages.find(m => m.senderType === 'agent' || m.senderType === 'admin');
 
-        for (const agentMsg of agentMessages) {
-          const customerMessages = customerMessagesByConv[agentMsg.conversationId] || [];
-          const precedingCustomerMsg = customerMessages
-            .filter(cm => new Date(cm.createdAt) < new Date(agentMsg.createdAt))
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-          
-          if (precedingCustomerMsg) {
-            const responseTimeMs = new Date(agentMsg.createdAt) - new Date(precedingCustomerMsg.createdAt);
-            const responseTimeMinutes = responseTimeMs / (1000 * 60);
-            
+          if (firstCustomerMsg && firstAgentReply) {
+            const responseTime = new Date(firstAgentReply.createdAt) - new Date(firstCustomerMsg.createdAt);
+            const responseTimeMinutes = responseTime / 60000;
+
             if (responseTimeMinutes > 0 && responseTimeMinutes < 7 * 24 * 60) {
-              totalResponseTime += responseTimeMinutes;
+              totalResponseTime += responseTime;
               responseCount++;
             }
           }
         }
-      }
-      
-      const avgResponseTime = responseCount > 0 
-        ? Math.round(totalResponseTime / responseCount) 
+      });
+
+      const avgResponseTime = responseCount > 0
+        ? Math.round(totalResponseTime / responseCount / 60000)
         : 0;
 
       // Determine last active time
       let lastActive = agent.updatedAt || agent.createdAt;
-      
-      if (agentMessages.length > 0) {
-        const lastMessageTime = new Date(agentMessages[0].createdAt);
+
+      // Use messages from conversations for last active
+      const allMessages = assignedConversations.flatMap(c => c.messages || []);
+      if (allMessages.length > 0) {
+        const sortedMessages = allMessages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const lastMessageTime = new Date(sortedMessages[0].createdAt);
         if (lastMessageTime > new Date(lastActive)) {
-          lastActive = agentMessages[0].createdAt;
+          lastActive = sortedMessages[0].createdAt;
         }
       }
-      
+
       if (assignedConversations.length > 0) {
         const lastConvUpdate = assignedConversations
           .map(c => c.updatedAt || c.lastMessageAt || c.createdAt)
           .filter(Boolean)
           .sort((a, b) => new Date(b) - new Date(a))[0];
-        
+
         if (lastConvUpdate && new Date(lastConvUpdate) > new Date(lastActive)) {
           lastActive = lastConvUpdate;
         }
@@ -223,10 +258,11 @@ export default async function handler(req, res) {
       // Determine online status (active in last 15 minutes) - fallback calculation
       const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
       const isOnlineByActivity = new Date(lastActive) > fifteenMinutesAgo;
-      
+
       // Use presenceStatus from database, fallback to calculated status
       const presenceStatus = agent.presenceStatus || (isOnlineByActivity ? 'online' : 'offline');
-      const isOnline = presenceStatus === 'online';
+      // Consider agent online if presenceStatus is 'online' OR they have recent activity
+      const isOnline = presenceStatus === 'online' || isOnlineByActivity;
 
       // Calculate customer rating
       let customerRating = '0.0';
@@ -269,14 +305,14 @@ export default async function handler(req, res) {
         role: resolvedRole,
         account: agent.account
           ? {
-              id: agent.account.id,
-              name: agent.account.name,
-              email: agent.account.email,
-              status: agent.account.status,
-              type: agent.account.type,
-              roleId: agent.account.roleId,
-              role: agent.account.role
-            }
+            id: agent.account.id,
+            name: agent.account.name,
+            email: agent.account.email,
+            status: agent.account.status,
+            type: agent.account.type,
+            roleId: agent.account.roleId,
+            role: agent.account.role
+          }
           : null,
         isActive: agent.isActive,
         maxLoad: agent.maxLoad,
@@ -304,13 +340,13 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     try {
-      const { name, email, userId, departmentId, roleId, isActive, maxLoad, skills } = req.body;
+      const { name, email, userId, departmentId, roleId, isActive, maxLoad, skills, currentPassword, newPassword } = req.body;
 
       // Try to find agent by slug first, then by id
       let existingAgent = await prisma.agent.findUnique({
         where: { slug: id }
       });
-      
+
       if (!existingAgent) {
         existingAgent = await prisma.agent.findUnique({
           where: { id }
@@ -347,7 +383,7 @@ export default async function handler(req, res) {
         const normalizedEmail = email.trim().toLowerCase();
         // Check if another agent with this email exists
         const agentWithEmail = await prisma.agent.findFirst({
-          where: { 
+          where: {
             email: normalizedEmail,
             id: { not: existingAgent.id }
           }
@@ -419,6 +455,66 @@ export default async function handler(req, res) {
           }
         }
         updateData.skills = parsedSkills ? JSON.stringify(parsedSkills) : null;
+      }
+
+      // Handle password change
+      if (newPassword) {
+        if (!existingAgent.accountId) {
+          return res.status(400).json({ message: 'Agent does not have an associated user account' });
+        }
+
+        // Get the user account
+        const userAccount = await prisma.user.findUnique({
+          where: { id: existingAgent.accountId }
+        });
+
+        if (!userAccount) {
+          return res.status(404).json({ message: 'User account not found' });
+        }
+
+        // Check if current user is an admin (can change password without current password)
+        const currentUserId = getCurrentUserId(req);
+        let isAdmin = false;
+
+        if (currentUserId) {
+          const currentUser = await prisma.user.findUnique({
+            where: { id: currentUserId },
+            include: {
+              role: {
+                select: {
+                  hasSuperPower: true
+                }
+              }
+            }
+          });
+
+          // Check if user has super power (admin) or is admin type
+          isAdmin = currentUser?.role?.hasSuperPower || currentUser?.type === 'admin' || false;
+        }
+
+        // If current password is provided, verify it (for non-admin users or when agent changes their own password)
+        if (currentPassword && !isAdmin) {
+          if (!userAccount.password) {
+            return res.status(400).json({ message: 'No password set for this account. Please set a password first.' });
+          }
+
+          const isPasswordValid = await bcrypt.compare(currentPassword, userAccount.password);
+          if (!isPasswordValid) {
+            return res.status(400).json({ message: 'Current password is incorrect' });
+          }
+        }
+
+        // Validate new password length
+        if (newPassword.length < 6) {
+          return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+        }
+
+        // Hash and update password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await prisma.user.update({
+          where: { id: existingAgent.accountId },
+          data: { password: hashedPassword }
+        });
       }
 
       let agent = await prisma.agent.update({
@@ -624,7 +720,7 @@ export default async function handler(req, res) {
       let agentToDelete = await prisma.agent.findUnique({
         where: { slug: id }
       });
-      
+
       if (!agentToDelete) {
         agentToDelete = await prisma.agent.findUnique({
           where: { id }
@@ -641,8 +737,8 @@ export default async function handler(req, res) {
       });
 
       if (assignedCount > 0) {
-        return res.status(400).json({ 
-          message: `Cannot delete agent. They have ${assignedCount} assigned ticket(s). Please reassign tickets first.` 
+        return res.status(400).json({
+          message: `Cannot delete agent. They have ${assignedCount} assigned ticket(s). Please reassign tickets first.`
         });
       }
 

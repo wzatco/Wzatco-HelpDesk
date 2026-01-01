@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     }
 
     const now = new Date();
-    
+
     // Calculate date ranges for the last 4 weeks
     const getWeekStart = (weeksAgo) => {
       const date = new Date(now);
@@ -55,7 +55,7 @@ export default async function handler(req, res) {
         assigneeId: agent.id
       },
       select: {
-        id: true,
+        ticketNumber: true,
         status: true,
         createdAt: true,
         updatedAt: true
@@ -66,12 +66,12 @@ export default async function handler(req, res) {
     const weeklyResolved = weeks.map((week, index) => {
       const resolved = agentConversations.filter(conv => {
         // Check if ticket was resolved/closed during this week
-        const resolvedDate = conv.status === 'resolved' || conv.status === 'closed' 
-          ? new Date(conv.updatedAt) 
+        const resolvedDate = conv.status === 'resolved' || conv.status === 'closed'
+          ? new Date(conv.updatedAt)
           : null;
-        
+
         if (!resolvedDate) return false;
-        
+
         return resolvedDate >= week.start && resolvedDate < week.end;
       }).length;
 
@@ -82,7 +82,7 @@ export default async function handler(req, res) {
       };
     });
 
-    // Calculate tickets created per day for last 7 days
+    // Calculate tickets with activity per day for last 7 days (created OR updated)
     const dailyTickets = [];
     for (let i = 6; i >= 0; i--) {
       const day = new Date(now);
@@ -93,7 +93,9 @@ export default async function handler(req, res) {
 
       const dayTickets = agentConversations.filter(conv => {
         const created = new Date(conv.createdAt);
-        return created >= day && created < nextDay;
+        const updated = new Date(conv.updatedAt);
+        // Count tickets that were created OR updated on this day
+        return (created >= day && created < nextDay) || (updated >= day && updated < nextDay);
       }).length;
 
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -122,9 +124,9 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error fetching agent analytics:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Internal server error',
-      error: error.message 
+      error: error.message
     });
   } finally {
     await prisma.$disconnect();

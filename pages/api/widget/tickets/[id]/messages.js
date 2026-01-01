@@ -86,6 +86,35 @@ export default async function handler(req, res) {
         }
       });
 
+      // Trigger webhook for message creation
+      try {
+        const { triggerWebhook } = await import('../../../../../lib/utils/webhooks');
+        await triggerWebhook('message.created', {
+          message: {
+            id: message.id,
+            content: message.content,
+            senderId: message.senderId,
+            senderType: message.senderType,
+            type: message.type,
+            createdAt: message.createdAt
+          },
+          ticket: {
+            ticketNumber: ticket.ticketNumber || id,
+            subject: ticket.subject,
+            status: ticket.status,
+            priority: ticket.priority
+          },
+          customer: {
+            id: customer.id,
+            name: customer.name,
+            email: customer.email
+          }
+        });
+      } catch (webhookError) {
+        console.error('Error triggering message.created webhook:', webhookError);
+        // Don't fail message creation if webhook fails
+      }
+
       // Update ticket's lastMessageAt
       await prisma.conversation.update({
         where: { id: id },

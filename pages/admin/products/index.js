@@ -24,7 +24,10 @@ import {
   Upload,
   Download,
   Image as ImageIcon,
-  XCircle
+  XCircle,
+  Ticket,
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 
 export default function ProductsPage() {
@@ -76,6 +79,14 @@ export default function ProductsPage() {
   const [documentFile, setDocumentFile] = useState(null);
   const [documentName, setDocumentName] = useState('');
   const [documentDescription, setDocumentDescription] = useState('');
+  const [showTicketsModal, setShowTicketsModal] = useState(false);
+  const [selectedProductForTickets, setSelectedProductForTickets] = useState(null);
+  const [productTickets, setProductTickets] = useState([]);
+  const [loadingTickets, setLoadingTickets] = useState(false);
+  const [showAccessoryTicketsModal, setShowAccessoryTicketsModal] = useState(false);
+  const [selectedAccessoryForTickets, setSelectedAccessoryForTickets] = useState(null);
+  const [accessoryTickets, setAccessoryTickets] = useState([]);
+  const [loadingAccessoryTickets, setLoadingAccessoryTickets] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -131,6 +142,68 @@ export default function ProductsPage() {
       if (fileInput) fileInput.value = '';
     }
   }, [showAddProductModal]);
+
+  const fetchProductTickets = async (productId) => {
+    try {
+      setLoadingTickets(true);
+      const response = await fetch(`/api/admin/products/${productId}/tickets`);
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setProductTickets(data.tickets || []);
+        setSelectedProductForTickets(data.product);
+      } else {
+        showNotification('error', data.message || 'Failed to fetch tickets');
+        setProductTickets([]);
+      }
+    } catch (error) {
+      console.error('Error fetching product tickets:', error);
+      showNotification('error', 'An error occurred while fetching tickets');
+      setProductTickets([]);
+    } finally {
+      setLoadingTickets(false);
+    }
+  };
+
+  const fetchAccessoryTickets = async (accessoryId) => {
+    try {
+      setLoadingAccessoryTickets(true);
+      const response = await fetch(`/api/admin/accessories/${accessoryId}/tickets`);
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setAccessoryTickets(data.tickets || []);
+        setSelectedAccessoryForTickets(data.accessory);
+      } else {
+        showNotification('error', data.message || 'Failed to fetch tickets');
+        setAccessoryTickets([]);
+      }
+    } catch (error) {
+      console.error('Error fetching accessory tickets:', error);
+      showNotification('error', 'An error occurred while fetching tickets');
+      setAccessoryTickets([]);
+    } finally {
+      setLoadingAccessoryTickets(false);
+    }
+  };
+
+  const handleTicketBadgeClick = (e, product) => {
+    e.stopPropagation();
+    if (product._count?.conversations > 0) {
+      setSelectedProductForTickets({ id: product.id, name: product.name });
+      setShowTicketsModal(true);
+      fetchProductTickets(product.id);
+    }
+  };
+
+  const handleAccessoryTicketBadgeClick = (e, accessory) => {
+    e.stopPropagation();
+    if (accessory._count?.conversations > 0) {
+      setSelectedAccessoryForTickets({ id: accessory.id, name: accessory.name });
+      setShowAccessoryTicketsModal(true);
+      fetchAccessoryTickets(accessory.id);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -866,7 +939,10 @@ export default function ProductsPage() {
                           <Badge className="bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-semibold px-2.5 py-1">
                             {productAccessories.length} {productAccessories.length === 1 ? 'Accessory' : 'Accessories'}
                           </Badge>
-                          <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2.5 py-1">
+                          <Badge 
+                            className={`bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2.5 py-1 ${product._count?.conversations > 0 ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors' : ''}`}
+                            onClick={(e) => handleTicketBadgeClick(e, product)}
+                          >
                             {product._count?.conversations || 0} {product._count?.conversations === 1 ? 'Ticket' : 'Tickets'}
                           </Badge>
                           <Button
@@ -995,7 +1071,10 @@ export default function ProductsPage() {
                                       )}
                                     </div>
                                     <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
-                                      <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-1">
+                                      <Badge 
+                                        className={`bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-1 ${accessory._count?.conversations > 0 ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors' : ''}`}
+                                        onClick={(e) => handleAccessoryTicketBadgeClick(e, accessory)}
+                                      >
                                         {accessory._count?.conversations || 0} {accessory._count?.conversations === 1 ? 'Ticket' : 'Tickets'}
                                       </Badge>
                                       <div className="flex gap-1.5">
@@ -2686,6 +2765,267 @@ export default function ProductsPage() {
                   </div>
                 </CardContent>
               </Card>
+            </div>,
+            document.body
+          ) : null}
+
+          {/* Product Tickets Modal */}
+          {showTicketsModal && selectedProductForTickets && isMounted && typeof window !== 'undefined' && typeof document !== 'undefined' && document.body ? createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 dark:bg-black/70 backdrop-blur-sm">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-700">
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Ticket className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                        Tickets for {selectedProductForTickets.name}
+                      </h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                        {productTickets.length} {productTickets.length === 1 ? 'ticket' : 'tickets'} found
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowTicketsModal(false);
+                      setSelectedProductForTickets(null);
+                      setProductTickets([]);
+                    }}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                  {loadingTickets ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                    </div>
+                  ) : productTickets.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Ticket className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                      <p className="text-slate-500 dark:text-slate-400">No tickets found for this product</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {productTickets.map((ticket) => (
+                        <div
+                          key={ticket.ticketNumber}
+                          className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-md transition-all cursor-pointer"
+                          onClick={() => {
+                            setShowTicketsModal(false);
+                            setSelectedProductForTickets(null);
+                            setProductTickets([]);
+                            router.push(`/admin/tickets/${ticket.ticketNumber}`);
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
+                                  #{ticket.ticketNumber}
+                                </span>
+                                <Badge
+                                  className={`text-xs font-semibold px-2 py-0.5 ${
+                                    ticket.status === 'open'
+                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                      : ticket.status === 'pending'
+                                      ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                                      : ticket.status === 'resolved'
+                                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {ticket.status}
+                                </Badge>
+                                <Badge
+                                  className={`text-xs font-semibold px-2 py-0.5 ${
+                                    ticket.priority === 'high'
+                                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                      : ticket.priority === 'medium'
+                                      ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {ticket.priority}
+                                </Badge>
+                              </div>
+                              <h3 className="font-semibold text-slate-900 dark:text-white mb-1 truncate">
+                                {ticket.subject}
+                              </h3>
+                              <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                                <span>Customer: {ticket.customerName}</span>
+                                {ticket.assignee && (
+                                  <span>Assigned to: {ticket.assignee.name}</span>
+                                )}
+                                {ticket.department && (
+                                  <span>Dept: {ticket.department.name}</span>
+                                )}
+                                <span>{ticket.messageCount} {ticket.messageCount === 1 ? 'message' : 'messages'}</span>
+                              </div>
+                              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                                Updated: {new Date(ticket.updatedAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <ExternalLink className="w-5 h-5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200 dark:border-slate-700">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowTicketsModal(false);
+                      setSelectedProductForTickets(null);
+                      setProductTickets([]);
+                    }}
+                    className="border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          ) : null}
+
+          {/* Accessory Tickets Modal */}
+          {showAccessoryTicketsModal && selectedAccessoryForTickets && isMounted && typeof window !== 'undefined' && typeof document !== 'undefined' && document.body ? createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 dark:bg-black/70 backdrop-blur-sm">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-700">
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Ticket className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                        Tickets for {selectedAccessoryForTickets.name}
+                      </h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                        {accessoryTickets.length} {accessoryTickets.length === 1 ? 'ticket' : 'tickets'} found
+                        {selectedAccessoryForTickets.productName && ` • Product: ${selectedAccessoryForTickets.productName}`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowAccessoryTicketsModal(false);
+                      setSelectedAccessoryForTickets(null);
+                      setAccessoryTickets([]);
+                    }}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                  {loadingAccessoryTickets ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                    </div>
+                  ) : accessoryTickets.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Ticket className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                      <p className="text-slate-500 dark:text-slate-400">No tickets found for this accessory</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {accessoryTickets.map((ticket) => (
+                        <div
+                          key={ticket.ticketNumber}
+                          className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-md transition-all cursor-pointer"
+                          onClick={() => {
+                            setShowAccessoryTicketsModal(false);
+                            setSelectedAccessoryForTickets(null);
+                            setAccessoryTickets([]);
+                            router.push(`/admin/tickets/${ticket.ticketNumber}`);
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
+                                  #{ticket.ticketNumber}
+                                </span>
+                                <Badge
+                                  className={`text-xs font-semibold px-2 py-0.5 ${
+                                    ticket.status === 'open'
+                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                      : ticket.status === 'pending'
+                                      ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                                      : ticket.status === 'resolved'
+                                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {ticket.status}
+                                </Badge>
+                                <Badge
+                                  className={`text-xs font-semibold px-2 py-0.5 ${
+                                    ticket.priority === 'high'
+                                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                      : ticket.priority === 'medium'
+                                      ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {ticket.priority}
+                                </Badge>
+                              </div>
+                              <h3 className="font-semibold text-slate-900 dark:text-white mb-1 truncate">
+                                {ticket.subject}
+                              </h3>
+                              <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                                <span>Customer: {ticket.customerName}</span>
+                                {ticket.assignee && (
+                                  <span>Assigned to: {ticket.assignee.name}</span>
+                                )}
+                                {ticket.department && (
+                                  <span>Dept: {ticket.department.name}</span>
+                                )}
+                                <span>{ticket.messageCount} {ticket.messageCount === 1 ? 'message' : 'messages'}</span>
+                              </div>
+                              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                                Updated: {new Date(ticket.updatedAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <ExternalLink className="w-5 h-5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200 dark:border-slate-700">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowAccessoryTicketsModal(false);
+                      setSelectedAccessoryForTickets(null);
+                      setAccessoryTickets([]);
+                    }}
+                    className="border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
             </div>,
             document.body
           ) : null}

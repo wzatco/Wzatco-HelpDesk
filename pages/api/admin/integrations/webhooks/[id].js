@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Prisma singleton pattern
+const globalForPrisma = globalThis;
+const prisma = globalForPrisma.prisma || new PrismaClient();
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export default async function handler(req, res) {
   const { id } = req.query;
@@ -28,8 +31,6 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching webhook:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else if (req.method === 'PATCH') {
     try {
@@ -109,8 +110,6 @@ export default async function handler(req, res) {
       }
       console.error('Error updating webhook:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else if (req.method === 'DELETE') {
     try {
@@ -125,8 +124,6 @@ export default async function handler(req, res) {
       }
       console.error('Error deleting webhook:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
     }
   } else {
     res.status(405).json({ success: false, message: 'Method not allowed' });

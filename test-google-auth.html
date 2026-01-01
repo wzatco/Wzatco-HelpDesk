@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Google Auth Widget</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+    .test-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border-left: 4px solid #8b5cf6;
+    }
+    .test-section h3 {
+      margin-top: 0;
+      color: #8b5cf6;
+    }
+    .status {
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+    .status.pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .status.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .status.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .result-box {
+      margin-top: 15px;
+      padding: 15px;
+      background: white;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .steps {
+      list-style: none;
+      padding: 0;
+      margin: 15px 0;
+    }
+    .steps li {
+      padding: 8px 0;
+      padding-left: 30px;
+      position: relative;
+    }
+    .steps li:before {
+      content: '→';
+      position: absolute;
+      left: 10px;
+      color: #8b5cf6;
+      font-weight: bold;
+    }
+    .widget-frame {
+      width: 100%;
+      height: 600px;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 Google Auth Widget Testing</h1>
+    <p class="subtitle">Test the complete Google OAuth flow for widget customers</p>
+
+    <!-- Test 1: Direct OAuth Flow -->
+    <div class="test-section">
+      <h3>Test 1: Direct OAuth Popup</h3>
+      <p>Tests the OAuth popup window and postMessage communication</p>
+      
+      <div id="test1-status" class="status pending">
+        ⏳ Ready to test
+      </div>
+      
+      <button onclick="testDirectOAuth()" id="test1-btn">
+        Test Google Sign-In Popup
+      </button>
+      
+      <div id="test1-result" class="result-box" style="display:none;"></div>
+      
+      <ul class="steps">
+        <li>Opens popup to /api/auth/signin?provider=google</li>
+        <li>Redirects through NextAuth OAuth flow</li>
+        <li>Returns to /api/auth/widget-callback</li>
+        <li>Shows success animation</li>
+        <li>Sends postMessage with user data</li>
+        <li>Popup auto-closes after 1.5s</li>
+      </ul>
+    </div>
+
+    <!-- Test 2: Full Widget Integration -->
+    <div class="test-section">
+      <h3>Test 2: Full Widget Integration</h3>
+      <p>Tests Google Auth within the actual widget interface</p>
+      
+      <div id="test2-status" class="status pending">
+        ⏳ Widget not loaded
+      </div>
+      
+      <button onclick="loadWidget()" id="test2-btn">
+        Load Widget & Test
+      </button>
+      
+      <iframe id="widget-frame" class="widget-frame" style="display:none;"></iframe>
+    </div>
+
+    <!-- Test 3: Check Database -->
+    <div class="test-section">
+      <h3>Test 3: Database Verification</h3>
+      <p>Verify that customer records are created correctly</p>
+      
+      <div id="test3-status" class="status pending">
+        ⏳ Not checked
+      </div>
+      
+      <button onclick="checkDatabase()" id="test3-btn">
+        Check Database
+      </button>
+      
+      <div id="test3-result" class="result-box" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script>
+    // Test 1: Direct OAuth Flow
+    async function testDirectOAuth() {
+      const statusEl = document.getElementById('test1-status');
+      const resultEl = document.getElementById('test1-result');
+      const btn = document.getElementById('test1-btn');
+      
+      statusEl.className = 'status pending';
+      statusEl.textContent = '⏳ Opening Google sign-in popup...';
+      btn.disabled = true;
+      resultEl.style.display = 'none';
+      
+      try {
+        const width = 500;
+        const height = 600;
+        const left = window.screenX + (window.outerWidth - width) / 2;
+        const top = window.screenY + (window.outerHeight - height) / 2;
+        
+        const popup = window.open(
+          '/api/auth/signin?provider=google&widget=true',
+          'Google Sign In Test',
+          `width=${width},height=${height},left=${left},top=${top}`
+        );
+
+        if (!popup) {
+          throw new Error('Popup blocked! Please allow popups for this site.');
+        }
+
+        statusEl.textContent = '⏳ Waiting for authentication...';
+
+        // Listen for success/error message
+        const messageHandler = (event) => {
+          if (event.origin !== window.location.origin) return;
+          
+          if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
+            const user = event.data.user;
+            statusEl.className = 'status success';
+            statusEl.textContent = '✅ Authentication successful!';
+            
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = `
+              <strong>User Data Received:</strong><br><br>
+              <strong>Name:</strong> ${user.name || 'N/A'}<br>
+              <strong>Email:</strong> ${user.email || 'N/A'}<br>
+              <strong>Image:</strong> ${user.image ? `<img src="${user.image}" style="width:40px;border-radius:50%;vertical-align:middle;margin-top:5px;" alt="Profile">` : 'N/A'}<br><br>
+              <strong>Full Response:</strong><br>
+              <pre>${JSON.stringify(user, null, 2)}</pre>
+            `;
+            
+            window.removeEventListener('message', messageHandler);
+          } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
+            statusEl.className = 'status error';
+            statusEl.textContent = '❌ Authentication failed!';
+            
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = `
+              <strong>Error:</strong> ${event.data.error || 'Unknown error'}<br><br>
+              <strong>Possible causes:</strong><br>
+              • Google OAuth not configured in admin settings<br>
+              • Invalid Google Client ID/Secret<br>
+              • User cancelled authentication<br>
+              • Network error
+            `;
+            
+            window.removeEventListener('message', messageHandler);
+          }
+          
+          btn.disabled = false;
+        };
+
+        window.addEventListener('message', messageHandler);
+
+        // Check if popup was closed
+        const checkClosed = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkClosed);
+            if (statusEl.className.includes('pending')) {
+              statusEl.className = 'status error';
+              statusEl.textContent = '❌ Popup closed before completion';
+              btn.disabled = false;
+              window.removeEventListener('message', messageHandler);
+            }
+          }
+        }, 500);
+
+      } catch (error) {
+        statusEl.className = 'status error';
+        statusEl.textContent = '❌ Error: ' + error.message;
+        btn.disabled = false;
+      }
+    }
+
+    // Test 2: Load Widget
+    function loadWidget() {
+      const statusEl = document.getElementById('test2-status');
+      const frameEl = document.getElementById('widget-frame');
+      const btn = document.getElementById('test2-btn');
+      
+      statusEl.className = 'status pending';
+      statusEl.textContent = '⏳ Loading widget...';
+      btn.disabled = true;
+      
+      frameEl.src = '/';
+      frameEl.style.display = 'block';
+      
+      frameEl.onload = () => {
+        statusEl.className = 'status success';
+        statusEl.textContent = '✅ Widget loaded! Click the chat icon and test Google sign-in';
+        btn.textContent = 'Reload Widget';
+        btn.disabled = false;
+      };
+    }
+
+    // Test 3: Check Database
+    async function checkDatabase() {
+      const statusEl = document.getElementById('test3-status');
+      const resultEl = document.getElementById('test3-result');
+      const btn = document.getElementById('test3-btn');
+      
+      statusEl.className = 'status pending';
+      statusEl.textContent = '⏳ Checking database...';
+      btn.disabled = true;
+      resultEl.style.display = 'none';
+      
+      try {
+        // This would need an API endpoint to check
+        statusEl.className = 'status error';
+        statusEl.textContent = '⚠️ Manual check required';
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = `
+          <strong>To verify database:</strong><br><br>
+          1. Open a terminal<br>
+          2. Run: <code>node check-database-state.js</code><br>
+          3. Check for the newly created customer with Google email<br>
+          4. Verify name and email fields are populated<br><br>
+          <strong>What to look for:</strong><br>
+          • Customer record with Google email<br>
+          • Name matches Google profile<br>
+          • Created timestamp is recent
+        `;
+      } catch (error) {
+        statusEl.className = 'status error';
+        statusEl.textContent = '❌ Error: ' + error.message;
+      }
+      
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>
