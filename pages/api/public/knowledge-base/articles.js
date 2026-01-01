@@ -1,5 +1,5 @@
 // Public API - Fetch all published Knowledge Base articles
-import prisma, { ensurePrismaConnected } from '../../../lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { blocksToPlainText, isBlocksContent } from '@/utils/blockRenderer';
 
 export default async function handler(req, res) {
