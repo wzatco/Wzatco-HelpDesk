@@ -8,7 +8,7 @@ import { SLAService } from '../../../../lib/sla-service';
  * IMPORTANT: For business hours enforcement, this should run frequently enough to catch:
  * - Morning business hours start (to resume paused timers)
  * - Evening business hours end (to pause running timers)
- * Recommended: Every 5 minutes (cron: "*/5 * * * *")
+ * Recommended schedule: Every 5 minutes
  */
 export default async function handler(req, res) {
   try {
