@@ -1,7 +1,6 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { generateUniqueSlug } from '@/lib/articleSlugGenerator';
-
-const prisma = new PrismaClient();
+
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {

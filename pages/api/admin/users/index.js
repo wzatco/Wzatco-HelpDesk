@@ -1,8 +1,7 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
-const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   const userId = getCurrentUserId(req);

@@ -1,7 +1,6 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { generateCustomerId, getNextCustomerSequence, getCategoryCode, getProductCode } from '../../../../lib/customerIdGenerator.js';
-
-const prisma = new PrismaClient();
+
 
 /**
  * API endpoint to update existing customer IDs to the new format

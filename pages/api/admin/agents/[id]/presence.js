@@ -1,6 +1,5 @@
-import prisma from '@/lib/prisma';
-
-const prisma = new PrismaClient();
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+
 
 const VALID_PRESENCE_STATUSES = ['online', 'away', 'busy', 'offline', 'on_leave', 'in_meeting', 'dnd'];
 

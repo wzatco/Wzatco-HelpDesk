@@ -1,8 +1,7 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { getTicketSettings } from '../../../../lib/settings';
 import { notifyStatusChange } from '@/lib/utils/notifications';
-
-const prisma = new PrismaClient();
+
 
 /**
  * Auto-close inactive tickets based on settings

@@ -1,8 +1,6 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
-
-const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   // Add CORS headers if needed

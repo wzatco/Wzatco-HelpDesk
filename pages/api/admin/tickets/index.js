@@ -1,4 +1,4 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { getSecuritySettings, getTicketSettings, getFileUploadSettings } from '@/lib/settings';
 import { triggerWebhook } from '@/lib/utils/webhooks';
 import { getCurrentUserId } from '@/lib/auth';
@@ -599,7 +599,6 @@ function generateTicketNumber() {
   return `${prefix}-${year}${month}-${day}-${randomLetters}`;
 }
 
-const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   // Get current user ID from auth token or header

@@ -1,6 +1,5 @@
-import prisma from '@/lib/prisma';
-
-const prisma = new PrismaClient();
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+
 
 /**
  * Increment usage count when a template is used

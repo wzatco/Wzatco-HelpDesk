@@ -1,7 +1,6 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { generateSlug } from '@/lib/articleSlugGenerator';
-
-const prisma = new PrismaClient();
+
 
 export default async function handler(req, res) {
   const { id } = req.query;

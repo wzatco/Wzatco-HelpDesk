@@ -5,10 +5,9 @@
  * Copy this pattern to other API endpoints to enforce role-based access control
  */
 
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { checkPermissionOrFail } from '../../../../lib/permissions';
-
-const prisma = new PrismaClient();
+
 
 export default async function handler(req, res) {
   try {
