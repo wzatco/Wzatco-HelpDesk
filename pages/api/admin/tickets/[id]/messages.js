@@ -4,24 +4,10 @@ import { parseMentions, findUserByMention } from '@/lib/utils/mentions';
 import { notifyMention, notifyCustomerMessage, notifyFirstResponseCustomer } from '@/lib/utils/notifications';
 import { getTicketSettings } from '@/lib/settings';
 
-// Get Socket.IO instance from server
-let ioInstance = null;
-export function setSocketIO(io) {
-  ioInstance = io;
-}
-
-// Helper to get Socket.IO instance
+// Get Socket.IO instance from global (set by server.js via chat-service)
 function getSocketIO() {
-  if (!ioInstance && typeof require !== 'undefined') {
-    try {
-      // Try to get from server.js
-      const serverModule = require('../../../server');
-      // This won't work directly, so we'll use a different approach
-    } catch (e) {
-      // Ignore
-    }
-  }
-  return ioInstance;
+  // Access the global Socket.IO instance set by server.js
+  return global.io || null;
 }
 
 export default async function handler(req, res) {
