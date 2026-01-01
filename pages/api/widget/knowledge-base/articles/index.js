@@ -1,17 +1,6 @@
 // Widget API - Fetch published Knowledge Base articles
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { blocksToPlainText, isBlocksContent } from '@/utils/blockRenderer';
-
-// Prisma singleton pattern to prevent connection leaks
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -20,6 +9,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensurePrismaConnected();
     const { category, search } = req.query;
     
     // Build where clause - only published and public articles
