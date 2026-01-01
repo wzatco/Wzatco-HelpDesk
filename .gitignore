@@ -5,3 +5,4 @@ node_modules/
 .env.production.local
 .env.development.local
 .DS_Store
+PRODUCTION_ENV_IMPORT.env
