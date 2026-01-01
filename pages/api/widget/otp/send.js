@@ -1,17 +1,6 @@
 // Widget API - Send OTP for email verification
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { sendEmail } from '../../../../lib/email/service';
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
 
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();

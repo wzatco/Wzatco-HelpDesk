@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { generateSlug, generateUniqueSlug } from '../../../../lib/utils/slug';
 import bcrypt from 'bcryptjs';
 import { getCurrentUserId } from '@/lib/auth';

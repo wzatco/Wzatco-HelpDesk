@@ -1,5 +1,5 @@
 import { SLAService } from '../../../../lib/sla-service';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 // Prisma singleton pattern
 const globalForPrisma = globalThis;

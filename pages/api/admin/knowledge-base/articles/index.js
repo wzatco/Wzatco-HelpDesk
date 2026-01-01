@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { generateUniqueSlug } from '@/lib/articleSlugGenerator';
 
 const prisma = new PrismaClient();

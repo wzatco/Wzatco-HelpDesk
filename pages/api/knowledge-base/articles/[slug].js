@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 // Prisma singleton pattern to prevent connection leaks
 let prisma;

@@ -1,18 +1,7 @@
 // Widget API - Schedule Callback
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { sendEmail } from '../../../lib/email/service';
 import { createNotification } from '../../../lib/utils/notifications';
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -21,6 +10,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensurePrismaConnected();
     const { date, time, phoneNumber, reason, email, name } = req.body;
 
     if (!date || !time || !phoneNumber || !email) {

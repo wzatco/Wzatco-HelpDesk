@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { updateTATMetrics } from '../../../../../lib/utils/tat';
 
 const prisma = new PrismaClient();

@@ -1,18 +1,7 @@
 // API endpoint for fetching a single customer with their tickets
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
 
 export default async function handler(req, res) {
   const { id } = req.query;

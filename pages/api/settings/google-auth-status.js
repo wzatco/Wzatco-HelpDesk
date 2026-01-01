@@ -1,5 +1,5 @@
 // Check if Google Auth is enabled
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 const prisma = new PrismaClient();
 

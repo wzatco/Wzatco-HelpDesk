@@ -1,7 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = global.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') global.prisma = prisma;
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -10,6 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensurePrismaConnected();
     const categories = await prisma.issueCategory.findMany({
       where: {
         isActive: true

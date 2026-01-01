@@ -5,7 +5,7 @@
  * Copy this pattern to other API endpoints to enforce role-based access control
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { checkPermissionOrFail } from '../../../../lib/permissions';
 
 const prisma = new PrismaClient();

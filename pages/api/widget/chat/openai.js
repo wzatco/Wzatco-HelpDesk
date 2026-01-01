@@ -1,5 +1,5 @@
 // Widget API - OpenAI Chat Completion (Server-side only)
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { decryptApiKey } from '@/lib/crypto-utils';
 import { blocksToPlainText, isBlocksContent } from '@/utils/blockRenderer';
 

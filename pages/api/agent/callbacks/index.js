@@ -1,5 +1,5 @@
 // Agent API - Fetch Assigned Callbacks
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { getCurrentAgentId } from '../../../../lib/utils/agent-auth';
 
 // Prisma singleton pattern

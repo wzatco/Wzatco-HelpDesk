@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { notifySLARisk } from '@/lib/utils/notifications';
 
 // Prisma singleton pattern

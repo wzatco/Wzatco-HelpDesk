@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { generateCustomerId, getNextCustomerSequence, getCategoryCode, getProductCode } from '../../../../lib/customerIdGenerator.js';
 
 const prisma = new PrismaClient();

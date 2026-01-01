@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 // Use singleton pattern for Prisma client
 const globalForPrisma = globalThis;

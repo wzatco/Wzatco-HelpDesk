@@ -1,5 +1,5 @@
 // Widget API - Accept/Reject Rescheduled Callback
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { sendEmail } from '../../../../../lib/email/service';
 
 let prisma;

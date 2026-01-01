@@ -1,16 +1,5 @@
 // Widget API - Fetch products for ticket creation
-import { PrismaClient } from '@prisma/client';
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -19,6 +8,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensurePrismaConnected();
     const products = await prisma.product.findMany({
       where: {
         isActive: true

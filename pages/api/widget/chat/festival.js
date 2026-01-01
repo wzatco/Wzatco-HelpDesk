@@ -1,5 +1,5 @@
 // API Route to detect current Indian festival using OpenAI
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import OpenAI from 'openai';
 import { decryptApiKey } from '@/lib/crypto-utils';
 

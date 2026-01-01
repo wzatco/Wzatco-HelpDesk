@@ -1,5 +1,5 @@
 // Debug endpoint to check what agent IDs/slugs/userIds are in the database
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 const prisma = new PrismaClient();
 

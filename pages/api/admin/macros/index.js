@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';

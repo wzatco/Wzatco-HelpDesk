@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { getTicketSettings } from '../../../../lib/settings';
 import { notifyStatusChange } from '@/lib/utils/notifications';
 

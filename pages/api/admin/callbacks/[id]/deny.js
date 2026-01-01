@@ -1,5 +1,5 @@
 // Admin API - Deny Callback
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { sendEmail } from '../../../../../lib/email/service';
 
 let prisma;

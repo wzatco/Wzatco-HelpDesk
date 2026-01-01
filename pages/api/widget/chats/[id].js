@@ -1,5 +1,5 @@
 // GET /api/widget/chats/[id] - Get single chat with messages
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 
 // Singleton pattern for PrismaClient
 let prisma;

@@ -1,18 +1,7 @@
 // Admin API - Assign Callback to Agent
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import { createNotification } from '@/lib/utils/notifications';
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'PATCH') {

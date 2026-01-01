@@ -1,5 +1,5 @@
 // Admin API - Reschedule Callback
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { sendEmail } from '../../../../../lib/email/service';
 import crypto from 'crypto';
 

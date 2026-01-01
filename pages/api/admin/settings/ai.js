@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { hashApiKey, getApiKeyPrefix, encryptApiKey, decryptApiKey } from '@/lib/crypto-utils';
 
 // Prisma singleton pattern
