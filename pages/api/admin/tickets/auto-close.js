@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { getTicketSettings } from '../../../../lib/settings';
 import { notifyStatusChange } from '@/lib/utils/notifications';
 
@@ -8,8 +8,7 @@ import { notifyStatusChange } from '@/lib/utils/notifications';
  * This should be called periodically (e.g., via cron job or scheduled task)
  */
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method !== 'POST') {
+    if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
@@ -134,8 +133,6 @@ export default async function handler(req, res) {
       message: 'Internal server error',
       error: error.message
     });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 

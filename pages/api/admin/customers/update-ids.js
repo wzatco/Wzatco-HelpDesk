@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { generateCustomerId, getNextCustomerSequence, getCategoryCode, getProductCode } from '../../../../lib/customerIdGenerator.js';
 
 
@@ -7,8 +7,7 @@ import { generateCustomerId, getNextCustomerSequence, getCategoryCode, getProduc
  * This should be run once to migrate existing customers
  */
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method !== 'POST') {
+    if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
@@ -133,8 +132,6 @@ export default async function handler(req, res) {
       message: 'Internal server error',
       error: error.message
     });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 

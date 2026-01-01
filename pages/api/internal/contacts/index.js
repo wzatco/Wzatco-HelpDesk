@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
+import prisma from '../../../../lib/prisma';
 import { getCurrentUserId, verifyToken } from '../../../../lib/auth';
 import { getCurrentAgentId } from '../../../../lib/utils/agent-auth';
 
@@ -12,9 +12,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  await ensurePrismaConnected();
-
-  try {
+    try {
     // Identify current user (Admin or Agent)
     const adminUserId = getCurrentUserId(req);
     const agentId = await getCurrentAgentId(req);

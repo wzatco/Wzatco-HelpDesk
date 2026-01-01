@@ -1,5 +1,7 @@
+import prisma from '@/lib/prisma';
+
 // Widget API - Check if email has existing tickets (for OTP requirement)
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -7,7 +9,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
     const { email } = req.query;
 
     if (!email) {

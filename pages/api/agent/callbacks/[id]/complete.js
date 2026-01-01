@@ -2,17 +2,6 @@
 import prisma from '@/lib/prisma';
 import { getCurrentAgentId } from '../../../../../lib/utils/agent-auth';
 
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'PATCH') {
     res.setHeader('Allow', ['PATCH']);

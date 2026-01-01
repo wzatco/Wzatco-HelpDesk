@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 const SETTINGS_KEYS = {
   ADMIN_LOGIN_SECURITY: 'security_admin_login',
@@ -12,8 +12,7 @@ const SETTINGS_KEYS = {
 export default async function handler(req, res) {
   if (req.method === 'GET') {
   try {
-      await ensurePrismaConnected();
-      // Get all security settings
+            // Get all security settings
       const settings = await prisma.settings.findMany({
         where: {
           category: 'security'

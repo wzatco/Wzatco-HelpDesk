@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
+import prisma from '../../../../lib/prisma';
 import { getCurrentUserId, verifyToken } from '../../../../lib/auth';
 import { getCurrentAgentId } from '../../../../lib/utils/agent-auth';
 
@@ -8,9 +8,7 @@ import { getCurrentAgentId } from '../../../../lib/utils/agent-auth';
  * Query params: ?search=term
  */
 async function handleGet(req, res) {
-  await ensurePrismaConnected();
-
-  try {
+    try {
     // Identify current user (Admin or Agent)
     const adminUserId = getCurrentUserId(req);
     const agentId = await getCurrentAgentId(req);
@@ -96,9 +94,7 @@ async function handleGet(req, res) {
  * Create a new canned response
  */
 async function handlePost(req, res) {
-  await ensurePrismaConnected();
-
-  try {
+    try {
     // Identify current user (Admin or Agent)
     const adminUserId = getCurrentUserId(req);
     const agentId = await getCurrentAgentId(req);

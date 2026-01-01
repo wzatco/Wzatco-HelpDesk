@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '../../../../../lib/prisma';
+import prisma from '../../../../../lib/prisma';
 import { getCurrentUserId, verifyToken } from '../../../../../lib/auth';
 import { getCurrentAgentId } from '../../../../../lib/utils/agent-auth';
 
@@ -10,8 +10,6 @@ import { getCurrentAgentId } from '../../../../../lib/utils/agent-auth';
  * Send a new message in a chat
  */
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-
   const { id: chatId } = req.query;
 
   if (!chatId) {

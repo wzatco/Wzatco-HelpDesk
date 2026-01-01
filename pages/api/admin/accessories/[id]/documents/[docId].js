@@ -1,10 +1,10 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id, docId } = req.query;
 
   if (req.method === 'GET') {
@@ -21,9 +21,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching document:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'PATCH') {
     try {
       const { name, description } = req.body;
@@ -48,9 +46,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error updating document:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'DELETE') {
     try {
       const document = await prisma.accessoryDocument.findUnique({
@@ -81,9 +77,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error deleting document:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.status(405).json({ message: 'Method not allowed' });
   }

@@ -1,11 +1,10 @@
 // Widget API - Send message to ticket
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
 
-      await ensurePrismaConnected();
       const { id } = req.query;
       const { content, email } = req.body;
 

@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
 
@@ -12,8 +12,7 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method !== 'POST') {
+    if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
@@ -102,8 +101,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Error uploading document:', error);
     res.status(500).json({ message: 'Failed to upload document', error: error.message });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 

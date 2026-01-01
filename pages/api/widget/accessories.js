@@ -1,5 +1,7 @@
+import prisma from '@/lib/prisma';
+
 // Widget API - Fetch accessories for ticket creation
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -8,7 +10,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
     const accessories = await prisma.accessory.findMany({
       where: {
         isActive: true

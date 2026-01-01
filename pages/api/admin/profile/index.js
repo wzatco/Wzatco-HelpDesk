@@ -1,9 +1,8 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
   // Add CORS headers if needed
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS');
@@ -182,9 +181,7 @@ export default async function handler(req, res) {
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 
 

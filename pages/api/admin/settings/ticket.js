@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
+import prisma from '../../../../lib/prisma';
 
 const SETTINGS_KEYS = {
   ANY_STAFF_CAN_REPLY: 'ticket_any_staff_reply',
@@ -16,9 +16,7 @@ const SETTINGS_KEYS = {
 
 export default async function handler(req, res) {
   // Ensure Prisma is connected before proceeding
-  await ensurePrismaConnected();
-
-  if (req.method === 'GET') {
+    if (req.method === 'GET') {
     try {
       // Get all ticket settings
       const settings = await prisma.settings.findMany({

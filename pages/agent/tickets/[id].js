@@ -914,6 +914,14 @@ export default function TicketViewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket?.status, timerData.activeLog, loadingWorklogs, updatingStatus]);
 
+  // Refresh timer when ticket status changes to resolved/closed (to sync with server-side auto-stop)
+  useEffect(() => {
+    if (ticket && (ticket.status === 'resolved' || ticket.status === 'closed') && !loadingWorklogs) {
+      refreshTimer();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket?.status]);
+
   // Initial fetch when ticket loads
   useEffect(() => {
     if (ticket?.ticketNumber) {
@@ -2319,6 +2327,10 @@ export default function TicketViewPage() {
         showNotification('success', `Ticket marked as ${newStatus}`);
         await fetchTicketDetails();
         await fetchActivities();
+        // Refresh timer after status update to sync with server
+        if (newStatus === 'resolved' || newStatus === 'closed') {
+          await refreshTimer();
+        }
       } else {
         try {
           const errorData = await response.json();

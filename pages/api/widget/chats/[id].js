@@ -1,17 +1,6 @@
 // GET /api/widget/chats/[id] - Get single chat with messages
 import prisma from '@/lib/prisma';
 
-// Singleton pattern for PrismaClient
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });

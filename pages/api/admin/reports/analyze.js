@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 /**
@@ -357,8 +357,7 @@ ${recommendations.longTerm.map((item) => '- ' + item).join('\n')}
 }
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method !== 'POST') {
+    if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
@@ -450,7 +449,5 @@ Use clear formatting with headers and bullet points. Be specific and data-driven
       message: 'Error generating analysis',
       error: error.message 
     });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }

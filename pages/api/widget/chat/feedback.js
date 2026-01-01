@@ -1,5 +1,5 @@
 // Widget API - Save Chat Feedback for AI Training
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

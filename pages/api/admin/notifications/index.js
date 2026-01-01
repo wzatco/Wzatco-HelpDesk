@@ -139,9 +139,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching notifications:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'POST') {
     // Create a new notification
     try {
@@ -166,9 +164,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error creating notification:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.status(405).json({ message: 'Method not allowed' });
   }

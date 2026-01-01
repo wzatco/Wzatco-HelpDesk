@@ -1,16 +1,5 @@
 import prisma from '@/lib/prisma';
 
-// Prisma singleton pattern to prevent connection leaks
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
-
 export default async function handler(req, res) {
   const { slug, category } = req.query;
 

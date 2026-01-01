@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { notifySLARisk } from '@/lib/utils/notifications';
 
 // Prisma singleton pattern
@@ -148,8 +148,7 @@ export async function checkTicketSLARisk(ticketId) {
 }
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method !== 'POST') {
+    if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 

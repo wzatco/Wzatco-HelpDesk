@@ -1,10 +1,9 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { generateSlug } from '@/lib/articleSlugGenerator';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method === 'GET') {
+    if (req.method === 'GET') {
     try {
       const includeInactive = req.query?.includeInactive === 'true';
       const categories = await prisma.articleCategory.findMany({
@@ -37,9 +36,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching categories:', error);
       res.status(500).json({ message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'POST') {
     try {
       const { name, description, parentId, order } = req.body;
@@ -94,9 +91,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error creating category:', error);
       res.status(500).json({ message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.setHeader('Allow', ['GET', 'POST']);
     res.status(405).json({ message: `Method ${req.method} not allowed` });

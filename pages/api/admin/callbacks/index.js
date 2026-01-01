@@ -1,5 +1,5 @@
 // Admin API - Fetch Callbacks
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -35,8 +35,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Error fetching callbacks:', error);
     res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 

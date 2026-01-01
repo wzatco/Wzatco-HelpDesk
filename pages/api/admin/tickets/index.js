@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { getSecuritySettings, getTicketSettings, getFileUploadSettings } from '@/lib/settings';
 import { triggerWebhook } from '@/lib/utils/webhooks';
 import { getCurrentUserId } from '@/lib/auth';
@@ -601,7 +601,6 @@ function generateTicketNumber() {
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
   // Get current user ID from auth token or header
   const userId = getCurrentUserId(req);
   
@@ -1006,9 +1005,7 @@ async function handleGet(req, res) {
       message: 'Internal server error',
       error: error.message 
     });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 
 async function handlePost(req, res) {
@@ -1533,7 +1530,5 @@ async function handlePost(req, res) {
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }

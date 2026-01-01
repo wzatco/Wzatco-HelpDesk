@@ -1,8 +1,8 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (req.method === 'GET') {
@@ -24,9 +24,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching role:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'PATCH') {
     try {
       const { title, displayAs, hasSuperPower } = req.body;
@@ -64,9 +62,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error updating role:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'DELETE') {
     try {
       // Check if role exists
@@ -99,9 +95,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error deleting role:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.setHeader('Allow', ['GET', 'PATCH', 'DELETE']);
     res.status(405).json({ success: false, message: `Method ${req.method} not allowed` });

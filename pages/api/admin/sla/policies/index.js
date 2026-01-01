@@ -1,10 +1,9 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 // Prisma singleton pattern
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  try {
+    try {
     if (req.method === 'GET') {
       // Get all SLA policies
       const policies = await prisma.sLAPolicy.findMany({

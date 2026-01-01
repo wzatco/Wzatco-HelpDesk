@@ -1,8 +1,8 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { slug } = req.query;
 
   if (req.method !== 'GET') {
@@ -76,9 +76,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Error fetching category articles:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 
 

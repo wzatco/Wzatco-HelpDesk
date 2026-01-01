@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 // Define all available pages/permissions
@@ -40,7 +40,7 @@ const AVAILABLE_PAGES = [
 ];
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (req.method === 'GET') {
@@ -82,9 +82,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching role permissions:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'POST' || req.method === 'PATCH') {
     try {
       const { permissions } = req.body; // Array of { pageName, hasAccess }
@@ -155,9 +153,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error updating role permissions:', error);
       res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.setHeader('Allow', ['GET', 'POST', 'PATCH']);
     res.status(405).json({ success: false, message: `Method ${req.method} not allowed` });

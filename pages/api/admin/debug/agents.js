@@ -1,10 +1,9 @@
 // Debug endpoint to check what agent IDs/slugs/userIds are in the database
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  try {
+    try {
     const agents = await prisma.agent.findMany({
       select: {
         id: true,

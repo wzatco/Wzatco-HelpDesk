@@ -1,11 +1,10 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  const userId = getCurrentUserId(req);
+    const userId = getCurrentUserId(req);
 
   if (req.method === 'GET') {
     // Check permission to view users
@@ -78,9 +77,7 @@ export default async function handler(req, res) {
         message: 'Failed to fetch users',
         error: error.message
       });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   }
 
   if (req.method === 'PATCH') {
@@ -174,9 +171,7 @@ export default async function handler(req, res) {
         message: 'Failed to update user',
         error: error.message
       });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   }
 
   return res.status(405).json({ message: 'Method not allowed' });

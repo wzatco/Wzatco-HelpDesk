@@ -1,11 +1,10 @@
 // API Route for Product Tutorials
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
   try {
-      await ensurePrismaConnected();
-      const tutorials = await prisma.productTutorial.findMany({
+            const tutorials = await prisma.productTutorial.findMany({
         include: {
           product: {
             select: {

@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 const SETTINGS_KEYS = {
   NOTIFICATION_ENABLED: 'notification_enabled',
@@ -8,8 +8,7 @@ const SETTINGS_KEYS = {
 export default async function handler(req, res) {
   if (req.method === 'GET') {
   try {
-      await ensurePrismaConnected();
-      // Get all notification settings
+            // Get all notification settings
       const settings = await prisma.settings.findMany({
         where: {
           category: 'notification'

@@ -1,5 +1,7 @@
+import prisma from '@/lib/prisma';
+
 // Check for existing open tickets by email
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -8,7 +10,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
     const { email, phone } = req.body;
 
     if (!email || !email.trim()) {

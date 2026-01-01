@@ -1,6 +1,7 @@
 // Widget API - Send OTP for email verification
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { sendEmail } from '../../../../lib/email/service';
+
+
 
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -41,6 +42,7 @@ export default async function handler(req, res) {
       return res.status(400).json({
         success: false,
         message: 'Email is required'
+import prisma from '@/lib/prisma';
       });
     }
 

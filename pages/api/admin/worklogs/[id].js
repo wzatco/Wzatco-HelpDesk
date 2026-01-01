@@ -1,9 +1,9 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { updateTATMetrics } from '../../../../lib/utils/tat';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (req.method === 'GET') {

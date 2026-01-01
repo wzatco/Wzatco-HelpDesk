@@ -5,13 +5,12 @@
  * Copy this pattern to other API endpoints to enforce role-based access control
  */
 
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { checkPermissionOrFail } from '../../../../lib/permissions';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  try {
+    try {
     // Get user ID from session/token/header
     // TODO: Replace this with your actual authentication method
     const userId = req.headers['x-user-id'] || req.query.userId;
@@ -115,8 +114,6 @@ export default async function handler(req, res) {
       success: false, 
       message: 'Internal server error' 
     });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 

@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 // Prisma singleton pattern
 
@@ -85,8 +85,7 @@ function combineCSVSheets(sheets, metadata = null) {
 }
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method !== 'GET') {
+    if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 

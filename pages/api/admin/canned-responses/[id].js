@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { getCurrentUserId, verifyToken } from '@/lib/auth';
 import { getCurrentAgentId } from '@/lib/utils/agent-auth';
 
@@ -7,7 +7,6 @@ import { getCurrentAgentId } from '@/lib/utils/agent-auth';
  * Update a canned response
  */
 async function handlePut(req, res) {
-  await ensurePrismaConnected();
 
   try {
     // Identify current user (Admin or Agent)
@@ -118,7 +117,6 @@ async function handlePut(req, res) {
  * Delete a canned response
  */
 async function handleDelete(req, res) {
-  await ensurePrismaConnected();
 
   try {
     // Identify current user (Admin or Agent)

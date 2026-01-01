@@ -1,8 +1,8 @@
 // Widget API - Create ticket with all form fields
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import formidable from 'formidable';
 import fs from 'fs';
 import path from 'path';
+import prisma from '@/lib/prisma';
 
 // Disable default body parser for file uploads
 export const config = {
@@ -10,9 +10,8 @@ export const config = {
     bodyParser: false,
   },
 };
-  }
-  prisma = global.prisma;
-}
+
+
 
 // Generate ticket number in format: TKT-YYMM-DD-{3 random uppercase letters}
 // Example: TKT-2512-12-SRB
@@ -39,7 +38,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
     // Parse form data (handles both regular fields and file uploads)
     const form = formidable({
       uploadDir: path.join(process.cwd(), 'public', 'uploads', 'tickets'),

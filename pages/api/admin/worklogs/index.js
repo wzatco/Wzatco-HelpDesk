@@ -1,10 +1,9 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { updateTATMetrics } from '../../../../lib/utils/tat';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method === 'GET') {
+    if (req.method === 'GET') {
     try {
       const { conversationId, ticketNumber, agentId, startDate, endDate } = req.query;
 

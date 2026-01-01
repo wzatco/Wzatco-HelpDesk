@@ -1,10 +1,10 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 const VALID_PRESENCE_STATUSES = ['online', 'away', 'busy', 'offline', 'on_leave', 'in_meeting', 'dnd'];
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (req.method === 'PATCH') {

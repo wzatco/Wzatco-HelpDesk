@@ -1,5 +1,8 @@
+import prisma from '@/lib/prisma';
+
 // Widget API - Fetch Knowledge Base categories
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+to prevent connection leaks
+
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -8,7 +11,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
     // Get categories that have published articles
     const categories = await prisma.articleCategory.findMany({
       where: {

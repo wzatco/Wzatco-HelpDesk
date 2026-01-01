@@ -1,11 +1,11 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { generateSlug, generateUniqueSlug } from '../../../../lib/utils/slug';
 import bcrypt from 'bcryptjs';
 import { getCurrentUserId } from '@/lib/auth';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (req.method === 'GET') {
@@ -333,9 +333,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching agent:', error);
       return res.status(500).json({ message: 'Failed to fetch agent', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   }
 
   if (req.method === 'PATCH') {
@@ -709,9 +707,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ message: 'Agent not found' });
       }
       return res.status(500).json({ message: 'Failed to update agent', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   }
 
   if (req.method === 'DELETE') {
@@ -760,9 +756,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ message: 'Agent not found' });
       }
       return res.status(500).json({ message: 'Failed to delete agent', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   }
 
   return res.status(405).json({ message: 'Method not allowed' });

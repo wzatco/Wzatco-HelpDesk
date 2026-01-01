@@ -3,17 +3,6 @@ import prisma from '@/lib/prisma';
 import OpenAI from 'openai';
 import { decryptApiKey } from '@/lib/crypto-utils';
 
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
-
 const SETTINGS_KEYS = {
   AI_API_KEYS_ENCRYPTED: 'ai_api_keys_encrypted',
   AI_ENABLED: 'ai_enabled'

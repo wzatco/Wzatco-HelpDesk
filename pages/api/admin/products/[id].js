@@ -1,8 +1,8 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (req.method === 'GET') {
@@ -40,9 +40,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching product:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'PATCH') {
     try {
       const { name, description, category, imageUrl, isActive } = req.body;
@@ -87,9 +85,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ message: 'Product not found' });
       }
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'DELETE') {
     try {
       // Check if product has models or tickets
@@ -132,9 +128,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ message: 'Product not found' });
       }
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.status(405).json({ message: 'Method not allowed' });
   }

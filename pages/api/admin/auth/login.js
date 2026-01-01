@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
+import prisma from '../../../../lib/prisma';
 import { getSecuritySettings } from '../../../../lib/settings';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -13,8 +13,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
-    const { email, password } = req.body;
+        const { email, password } = req.body;
     const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
 
     // Get security settings (with fallback if database fails)

@@ -2,16 +2,6 @@
 import prisma from '@/lib/prisma';
 import { sendEmail } from '../../../../../lib/email/service';
 
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -177,8 +167,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Error processing reschedule response:', error);
     res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 

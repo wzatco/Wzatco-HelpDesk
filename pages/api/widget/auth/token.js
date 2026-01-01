@@ -1,6 +1,6 @@
 // Widget API - Get Socket JWT Token for Google Auth Users
 import { getToken } from 'next-auth/jwt';
-import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
+import prisma from '../../../../lib/prisma';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -16,9 +16,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
-  await ensurePrismaConnected();
-
-  try {
+    try {
     // Get NextAuth JWT token (for Google Auth users)
     // This is the same approach used in widget-callback.js
     const nextAuthToken = await getToken({ 

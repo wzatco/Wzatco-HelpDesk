@@ -2,16 +2,6 @@ import prisma from '../../../../../lib/prisma';
 import { getCurrentAgent } from '../../../../../lib/utils/agent-auth';
 
 export default async function handler(req, res) {
-  // Ensure Prisma is connected before proceeding
-  try {
-    await prisma.$connect();
-  } catch (error) {
-    // If already connected, this will throw - ignore it
-    if (!error.message?.includes('already connected')) {
-      console.error('Prisma connection error:', error);
-    }
-  }
-
   // Verify agent authentication
   let agent;
   try {

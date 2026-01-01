@@ -1,9 +1,8 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method === 'GET') {
+    if (req.method === 'GET') {
     try {
       const { productId, includeInactive = 'false' } = req.query;
       
@@ -41,9 +40,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching accessories:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'POST') {
     try {
       const { productId, name, description, imageUrl, specifications, isActive = true } = req.body;
@@ -116,9 +113,7 @@ export default async function handler(req, res) {
         return res.status(409).json({ message: 'Accessory with this name already exists for this product' });
       }
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.status(405).json({ message: 'Method not allowed' });
   }

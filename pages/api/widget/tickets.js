@@ -1,10 +1,11 @@
+import prisma from '@/lib/prisma';
+
 // Widget API - Fetch and manage tickets for widget
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
-      await ensurePrismaConnected();
       const { email } = req.query;
 
       console.log('🔍 Widget Tickets API: Received request with email:', email);

@@ -1,11 +1,9 @@
-import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
+import prisma from '../../../../lib/prisma';
 import { calculateAgentTAT } from '../../../../lib/utils/tat';
 
 export default async function handler(req, res) {
   // Ensure Prisma is connected before proceeding
-  await ensurePrismaConnected();
-
-  if (req.method !== 'GET') {
+    if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 

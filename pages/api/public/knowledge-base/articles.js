@@ -1,5 +1,5 @@
 // Public API - Fetch all published Knowledge Base articles
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { blocksToPlainText, isBlocksContent } from '@/utils/blockRenderer';
 
 export default async function handler(req, res) {
@@ -9,8 +9,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
-    const { category, categoryId, search } = req.query;
+        const { category, categoryId, search } = req.query;
     
     // Build where clause - ONLY published and public articles (strict filter)
     const where = {

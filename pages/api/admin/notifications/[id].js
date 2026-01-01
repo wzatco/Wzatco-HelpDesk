@@ -1,8 +1,8 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (req.method === 'PATCH') {
@@ -43,9 +43,7 @@ export default async function handler(req, res) {
         });
       }
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'DELETE') {
     // Delete notification
     try {
@@ -61,9 +59,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ message: 'Notification not found (may be old format)' });
       }
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.status(405).json({ message: 'Method not allowed' });
   }

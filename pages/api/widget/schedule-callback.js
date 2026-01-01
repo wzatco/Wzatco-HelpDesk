@@ -1,7 +1,8 @@
 // Widget API - Schedule Callback
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { sendEmail } from '../../../lib/email/service';
 import { createNotification } from '../../../lib/utils/notifications';
+
+
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -10,7 +11,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
     const { date, time, phoneNumber, reason, email, name } = req.body;
 
     if (!date || !time || !phoneNumber || !email) {
@@ -111,6 +111,7 @@ export default async function handler(req, res) {
 
     // Send email to admin
     const customerName = name || customer.name || 'Guest';
+import prisma from '@/lib/prisma';
     const formattedDate = new Date(scheduledTime).toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',

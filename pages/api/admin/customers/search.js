@@ -1,9 +1,8 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  if (req.method !== 'GET') {
+    if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
@@ -60,8 +59,6 @@ export default async function handler(req, res) {
       message: 'Internal server error',
       error: error.message 
     });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 

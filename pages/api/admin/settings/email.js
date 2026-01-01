@@ -1,12 +1,11 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 export default async function handler(req, res) {
   const SETTINGS_KEY = 'smtp_config';
 
   if (req.method === 'GET') {
   try {
-      await ensurePrismaConnected();
-      // Get settings from database, or return defaults
+            // Get settings from database, or return defaults
       let settings = await prisma.emailSettings.findUnique({
         where: { key: SETTINGS_KEY }
       });

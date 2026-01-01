@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
+import prisma from '../../../../lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
@@ -12,9 +12,7 @@ export default async function handler(req, res) {
       if (!hasAccess) return;
     }
     try {
-      await ensurePrismaConnected();
-      
-      // Fetch roles with agent counts
+            // Fetch roles with agent counts
       const roles = await prisma.role.findMany({
         orderBy: { createdAt: 'desc' },
         include: {

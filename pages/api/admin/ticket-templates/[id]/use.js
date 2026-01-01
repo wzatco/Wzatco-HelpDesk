@@ -1,11 +1,11 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 /**
  * Increment usage count when a template is used
  */
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
@@ -29,8 +29,6 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, message: 'Template not found' });
     }
     res.status(500).json({ success: false, message: 'Internal server error' });
-  } finally {
-    await prisma.$disconnect();
-  }
+  } 
 }
 

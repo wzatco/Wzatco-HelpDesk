@@ -1,5 +1,5 @@
 import { SLAService } from '../../../../lib/sla-service';
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 // Prisma singleton pattern
 
@@ -8,8 +8,7 @@ import prisma, { ensurePrismaConnected } from '@/lib/prisma';
  * Handle SLA actions like start, pause, resume, stop timers
  */
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
-  try {
+    try {
     if (req.method === 'POST') {
       const { action, conversationId, priority, departmentId, category, timerType, reason } = req.body;
 

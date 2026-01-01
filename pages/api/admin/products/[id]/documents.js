@@ -1,8 +1,8 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (req.method === 'GET') {
@@ -16,9 +16,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching documents:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'POST') {
     try {
       const { name, description, fileUrl, fileType, fileSize, uploadedBy } = req.body;
@@ -43,9 +41,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error creating document:', error);
       res.status(500).json({ message: 'Internal server error' });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.status(405).json({ message: 'Method not allowed' });
   }

@@ -1,9 +1,9 @@
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { generateSlug } from '@/lib/articleSlugGenerator';
 
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   const { id } = req.query;
 
   if (!id) {
@@ -35,9 +35,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error fetching category:', error);
       res.status(500).json({ message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'PATCH') {
     try {
       const existing = await prisma.articleCategory.findUnique({ where: { id } });
@@ -142,9 +140,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error updating category:', error);
       res.status(500).json({ message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else if (req.method === 'DELETE') {
     try {
       const category = await prisma.articleCategory.findUnique({
@@ -182,9 +178,7 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Error deleting category:', error);
       res.status(500).json({ message: 'Internal server error', error: error.message });
-    } finally {
-      await prisma.$disconnect();
-    }
+    } 
   } else {
     res.setHeader('Allow', ['GET', 'PATCH', 'DELETE']);
     res.status(405).json({ message: `Method ${req.method} not allowed` });

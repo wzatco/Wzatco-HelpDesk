@@ -15,7 +15,7 @@ const updateMacroSchema = z.object({
 }).partial();
 
 export default async function handler(req, res) {
-  await ensurePrismaConnected();
+
   try {
     const userId = getCurrentUserId(req);
 

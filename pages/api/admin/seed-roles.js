@@ -1,4 +1,4 @@
-import prisma, { ensurePrismaConnected } from '../../../lib/prisma';
+import prisma from '../../../lib/prisma';
 
 /**
  * POST /api/admin/seed-roles
@@ -10,9 +10,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePrismaConnected();
-
-    const defaultRoles = [
+        const defaultRoles = [
       {
         title: 'Department Head',
         displayAs: 'Department Head',

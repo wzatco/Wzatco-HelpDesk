@@ -1,5 +1,7 @@
+import prisma from '@/lib/prisma';
+
 // Widget API - Fetch Product Tutorials
-import prisma, { ensurePrismaConnected } from '@/lib/prisma';
+
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
