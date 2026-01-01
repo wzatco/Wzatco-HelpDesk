@@ -1,0 +1,26 @@
+# FIX FOR .env FILE - RUN THIS COMMAND
+
+# Your .env file has quotes around DATABASE_URL which breaks Prisma
+# Run this PowerShell command to fix it:
+
+@"
+# Database Connection (MySQL - Hostinger Remote)
+DATABASE_URL=mysql://u394742293_HD_demo:Rohan_1025@82.180.140.4:3306/u394742293_HD_demo
+
+# JWT Secret for authentication tokens
+JWT_SECRET=f6da1e74a35dd310ca31f48d922f9da4ed45b25b5869100a099c2e522ac93e0357da8e7897552d33bd5f52cf030661a6de58744ae0cd5f7973143318f99e2453
+
+# NextAuth Secret (Session Management)
+NEXTAUTH_SECRET=f6da1e74a35dd310ca31f48d922f9da4ed45b25b5869100a099c2e522ac93e0357da8e7897552d33bd5f52cf030661a6de58744ae0cd5f7973143318f99e2453
+
+# Application Base URL
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
+
+# Node Environment
+NODE_ENV=development
+"@ | Out-File -FilePath .env -Encoding utf8 -NoNewline
+
+# AFTER RUNNING THE COMMAND ABOVE, RESTART YOUR SERVER:
+# 1. Stop the current server (Ctrl+C in the terminal where it's running)
+# 2. Run: npm run dev
+

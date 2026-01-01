@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed SLA Policies</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #64748b;
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+        .info {
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .info h2 {
+            color: #334155;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .info ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .info li {
+            color: #475569;
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        .info li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+        .result.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 2px solid #10b981;
+            display: block;
+        }
+        .result.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 2px solid #ef4444;
+            display: block;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .policy-list {
+            margin-top: 15px;
+        }
+        .policy-item {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 4px solid #10b981;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Seed SLA Policies</h1>
+        <p class="subtitle">Create default SLA policies for your helpdesk</p>
+        
+        <div class="info">
+            <h2>This will create 3 policies:</h2>
+            <ul>
+                <li><strong>Standard Support SLA</strong> (Default)<br><small>Low: 8h/48h | Medium: 4h/24h | High: 1h/8h | Urgent: 15min/4h</small></li>
+                <li><strong>High Priority SLA</strong><br><small>Aggressive timers, 24/7 support</small></li>
+                <li><strong>Basic SLA</strong><br><small>Relaxed timers for general inquiries</small></li>
+            </ul>
+        </div>
+
+        <button id="seedBtn" onclick="seedPolicies()">
+            Create Policies
+        </button>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        async function seedPolicies() {
+            const btn = document.getElementById('seedBtn');
+            const result = document.getElementById('result');
+            
+            // Disable button and show loading
+            btn.disabled = true;
+            btn.innerHTML = 'Creating Policies<span class="loading"></span>';
+            result.style.display = 'none';
+            result.className = 'result';
+            
+            try {
+                const response = await fetch('/api/admin/sla/seed-policies', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.className = 'result success';
+                    result.innerHTML = `
+                        <strong>✅ Success!</strong> SLA Policies created successfully!
+                        <div class="policy-list">
+                            ${data.policies.map(p => `
+                                <div class="policy-item">
+                                    <strong>${p.name}</strong><br>
+                                    <small>ID: ${p.id}</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <p style="margin-top: 15px;">
+                            <strong>Next step:</strong> Go to your workflow builder and try saving again!
+                        </p>
+                    `;
+                    btn.innerHTML = '✅ Policies Created!';
+                    btn.style.background = '#10b981';
+                } else {
+                    throw new Error(data.message || 'Failed to create policies');
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `
+                    <strong>❌ Error:</strong> ${error.message}<br><br>
+                    <small>Make sure your dev server is running and the database is accessible.</small>
+                `;
+                btn.innerHTML = 'Try Again';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
+
