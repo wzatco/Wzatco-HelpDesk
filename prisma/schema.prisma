@@ -6,6 +6,10 @@ datasource db {
   provider     = "mysql"
   url          = env("DATABASE_URL")
   relationMode = "prisma"
+  // Increase connection pool for production
+  // This helps with multiple Prisma instances
+  pool_timeout = 30
+  connection_limit = 20
 }
 
 model Department {
