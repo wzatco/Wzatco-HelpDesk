@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [captchaEnabled, setCaptchaEnabled] = useState(true); // Default to enabled
+  const [captchaEnabled, setCaptchaEnabled] = useState(false); // Default to disabled
 
   // Redirect if already authenticated (only once)
   useEffect(() => {
@@ -77,15 +77,15 @@ export default function AdminLoginPage() {
           return;
         }
         
-        // Explicitly check if adminLogin is true (not just not false)
-        const isEnabled = settingsData.settings.enabledPlacements.adminLogin === true;
+        // Captcha is disabled for admin login
+        const isEnabled = false;
         
         if (mounted) {
-          setCaptchaEnabled(isEnabled);
+          setCaptchaEnabled(false);
         }
         
-        // Only fetch captcha if it's enabled
-        if (isEnabled) {
+        // Captcha is disabled, so don't fetch it
+        if (false) {
           const captchaRes = await fetch('/api/admin/captcha/generate');
           if (!mounted) return;
           
@@ -125,9 +125,9 @@ export default function AdminLoginPage() {
       const res = await fetch('/api/admin/settings/captcha');
       const data = await res.json();
       if (data.success && data.settings?.enabledPlacements) {
-        // Explicitly check if adminLogin is true
-        const isEnabled = data.settings.enabledPlacements.adminLogin === true;
-        setCaptchaEnabled(isEnabled);
+        // Captcha is disabled for admin login
+        const isEnabled = false;
+        setCaptchaEnabled(false);
         
         // If disabled, clear captcha
         if (!isEnabled) {
@@ -140,8 +140,8 @@ export default function AdminLoginPage() {
       }
     } catch (error) {
       console.error('Error fetching captcha settings:', error);
-      // Default to enabled if error (for security)
-      setCaptchaEnabled(true);
+      // Default to disabled
+      setCaptchaEnabled(false);
     }
   };
 

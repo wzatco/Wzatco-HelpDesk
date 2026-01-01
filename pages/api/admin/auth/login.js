@@ -36,11 +36,12 @@ export default async function handler(req, res) {
 
     // Get captcha settings (with fallback if database fails)
     let captchaSettings;
+    // Captcha is disabled for admin login
     let captchaEnabledForAdminLogin = false;
     try {
       captchaSettings = await getCaptchaSettings();
-      // Explicitly check if adminLogin is true (not just not false)
-      captchaEnabledForAdminLogin = captchaSettings.enabledPlacements?.adminLogin === true;
+      // Captcha is explicitly disabled for admin login
+      captchaEnabledForAdminLogin = false;
     } catch (error) {
       console.error('Error fetching captcha settings:', error);
       // Default to disabled if database query fails
