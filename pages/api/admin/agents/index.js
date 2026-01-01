@@ -1,9 +1,10 @@
-import prisma from '../../../../lib/prisma';
+import prisma, { ensurePrismaConnected } from '../../../../lib/prisma';
 import { generateSlug, generateUniqueSlug } from '../../../../lib/utils/slug';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   const userId = getCurrentUserId(req);
 
   if (req.method === 'GET') {
@@ -28,10 +29,6 @@ export default async function handler(req, res) {
     }
     // If no userId, continue (for development/testing or public endpoints)
     try {
-      // Add a small delay to ensure Prisma engine is ready
-      // This prevents "Response from the Engine was empty" errors
-      await new Promise(resolve => setTimeout(resolve, 50));
-
       // Fetch agents with their related data
       // Try with account relation first, fall back without it if it fails
       let agents;
