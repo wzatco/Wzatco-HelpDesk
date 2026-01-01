@@ -3,22 +3,23 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
 }
 
 model Department {
   id                    String           @id @default(cuid())
   name                  String           @unique
-  description           String?
+  description           String?          @db.Text
   isActive              Boolean          @default(true)
   departmentHeadId      String?
-  slaConfig             String?
-  workingHours          String?
-  holidays              String?
+  slaConfig             String?          @db.Text
+  workingHours          String?          @db.Text
+  holidays              String?          @db.Text
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
-  departmentHead        Agent?           @relation("DepartmentHead", fields: [departmentHeadId], references: [id])
+  departmentHead        Agent?           @relation("DepartmentHead", fields: [departmentHeadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   agents                Agent[]
   routedTickets         Conversation[]
   escalationAssignRules EscalationRule[] @relation("EscalationAssignDepartment")
@@ -65,7 +66,7 @@ model Agent {
   slug                  String              @unique
   departmentId          String?
   roleId                String?
-  skills                String?
+  skills                String?             @db.Text
   isActive              Boolean             @default(true)
   maxLoad               Int?
   presenceStatus        String              @default("offline")
@@ -74,11 +75,11 @@ model Agent {
   leaveFrom             DateTime?
   leaveTo               DateTime?
   // --- New Profile Fields ---
-  bio                   String?
+  bio                   String?             @db.Text
   jobTitle              String?
   mobile                String?
   extension             String?
-  address               String?
+  address               String?             @db.Text
   city                  String?
   state                 String?
   country               String?
@@ -88,7 +89,7 @@ model Agent {
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
   role                  Role?               @relation(fields: [roleId], references: [id])
-  department            Department?         @relation(fields: [departmentId], references: [id])
+  department            Department?         @relation(fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   account               User?               @relation(fields: [accountId], references: [id])
   managedDepartments    Department[]        @relation("DepartmentHead")
   assignedConversations Conversation[]
@@ -155,7 +156,7 @@ model Conversation {
   ticketNumber             String            @id // Primary key - format: TKT-YYMM-DD-XXX
   siteId                   String
   status                   String            @default("open")
-  subject                  String?
+  subject                  String?           @db.Text
   assigneeId               String?
   customerId               String?
   departmentId             String?
@@ -176,10 +177,10 @@ model Conversation {
   customerEmail            String?
   customerPhone            String?
   customerAltPhone         String?
-  customerAddress          String?
+  customerAddress          String?           @db.Text
   orderNumber              String?
   purchasedFrom            String? // Official Site, Amazon, Flipkart, Other
-  ticketBody               String? // Detailed description/body
+  ticketBody               String?           @db.Text // Detailed description/body
   invoiceUrl               String? // URL to uploaded invoice file
   additionalDocuments      Json? // Array of document URLs/metadata (max 5 files)
   projectorImages          Json? // Array of 4 projector image URLs (front, back, left, right)
@@ -220,7 +221,7 @@ model Message {
   conversationId  String
   senderId        String?
   senderType      String
-  content         String
+  content         String       @db.Text
   type            String       @default("text")
   metadata        Json?
   createdAt       DateTime     @default(now())
@@ -253,7 +254,7 @@ model ReadReceipt {
 model TicketNote {
   id             String       @id @default(cuid())
   conversationId String
-  content        String
+  content        String       @db.Text
   createdById    String?
   createdByName  String?
   isPrivate      Boolean      @default(true)
@@ -272,8 +273,8 @@ model Admin {
   phone       String?
   role        String?  @default("Admin")
   avatarUrl   String?
-  bio         String?
-  address     String?
+  bio         String?         @db.Text
+  address     String?          @db.Text
   city        String?
   state       String?
   country     String?
@@ -290,12 +291,12 @@ model TicketActivity {
   id              String       @id @default(cuid())
   conversationId  String
   activityType    String
-  oldValue        String?
-  newValue        String?
+  oldValue        String?          @db.Text
+  newValue        String?          @db.Text
   performedBy     String       @default("admin")
   performedByName String?
   createdAt       DateTime     @default(now())
-  reason          String?
+  reason          String?          @db.Text
   Conversation    Conversation @relation(fields: [conversationId], references: [ticketNumber])
 
   @@index([conversationId])
@@ -331,8 +332,8 @@ model AssignmentRule {
   ruleType    String
   priority    Int      @default(0)
   enabled     Boolean  @default(true)
-  config      String?
-  description String?
+  config      String?      @db.Text
+  description String?      @db.Text
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -346,7 +347,7 @@ model AssignmentHistory {
   conversationId String
   assignedToId   String
   assignedAt     DateTime @default(now())
-  metadata       String?
+  metadata       String?      @db.Text
 
   @@index([ruleType, assignedToId])
   @@index([conversationId])
@@ -356,8 +357,8 @@ model AssignmentHistory {
 model SavedFilter {
   id          String   @id @default(cuid())
   name        String
-  description String?
-  filters     String
+  description String?      @db.Text
+  filters     String       @db.Text
   createdBy   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -369,7 +370,7 @@ model Feedback {
   id             String       @id @default(cuid())
   conversationId String
   rating         Int
-  comment        String?
+  comment        String?          @db.Text
   customerId     String?
   customerName   String?
   agentId        String?
@@ -388,11 +389,11 @@ model ChatFeedback {
   messageId   String
   sessionId   String?
   rating      String
-  feedback    String?
+  feedback    String?          @db.Text
   userEmail   String?
   userName    String?
-  userMessage String?
-  aiResponse  String?
+  userMessage String?          @db.Text
+  aiResponse  String?          @db.Text
   category    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -410,7 +411,7 @@ model Worklog {
   startedAt       DateTime  @default(now())
   endedAt         DateTime? // Null = Currently Active
   durationSeconds Int       @default(0) // Calculated ONLY when stopped
-  stopReason      String? // e.g. "Break", "Manual Stop"
+  stopReason      String?      @db.Text // e.g. "Break", "Manual Stop"
   isSystemAuto    Boolean   @default(false)
 
   // Relations
@@ -432,12 +433,12 @@ model Notification {
   id        String    @id @default(cuid())
   userId    String?
   type      String
-  title     String
-  message   String
+  title     String       @db.Text
+  message   String       @db.Text
   link      String?
   read      Boolean   @default(false)
   readAt    DateTime?
-  metadata  String?
+  metadata  String?      @db.Text
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -450,7 +451,7 @@ model Notification {
 model Product {
   id              String            @id @default(cuid())
   name            String            @unique
-  description     String?
+  description     String?              @db.Text
   category        String?
   isActive        Boolean           @default(true)
   createdAt       DateTime          @default(now())
@@ -470,8 +471,8 @@ model Accessory {
   id             String         @id @default(cuid())
   productId      String
   name           String
-  description    String?
-  specifications String?
+  description    String?              @db.Text
+  specifications String?              @db.Text
   isActive       Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -488,7 +489,7 @@ model ProductDocument {
   id          String   @id @default(cuid())
   productId   String
   name        String
-  description String?
+  description String?      @db.Text
   fileUrl     String
   fileType    String?
   fileSize    Int?
@@ -503,8 +504,8 @@ model ProductDocument {
 model Settings {
   id          String  @id @default(cuid())
   key         String  @unique
-  value       String?
-  description String?
+  value       String?      @db.Text
+  description String?      @db.Text
   category    String?
 
   // Google Authentication Integration
@@ -527,9 +528,9 @@ model Settings {
 model TicketTemplate {
   id           String      @id @default(cuid())
   name         String
-  description  String?
-  subject      String?
-  message      String
+  description  String?      @db.Text
+  subject      String?      @db.Text
+  message      String       @db.Text
   category     String?
   priority     String?
   productId    String?
@@ -551,7 +552,7 @@ model TicketTemplate {
 model EscalationRule {
   id                   String      @id @default(cuid())
   name                 String
-  description          String?
+  description          String?              @db.Text
   ruleType             String
   enabled              Boolean     @default(true)
   priority             Int         @default(0)
@@ -565,7 +566,7 @@ model EscalationRule {
   addTagIds            String?
   notifyAdmins         Boolean     @default(false)
   notifyAgents         Boolean     @default(false)
-  config               String?
+  config               String?         @db.Text
   lastRunAt            DateTime?
   executionCount       Int         @default(0)
   createdAt            DateTime    @default(now())
@@ -581,11 +582,11 @@ model EscalationRule {
 model Webhook {
   id          String       @id @default(cuid())
   name        String
-  description String?
+  description String?      @db.Text
   url         String
   method      String       @default("POST")
   events      String
-  headers     String?
+  headers     String?      @db.Text
   secret      String?
   enabled     Boolean      @default(true)
   retryCount  Int          @default(3)
@@ -602,11 +603,11 @@ model WebhookLog {
   id            String   @id @default(cuid())
   webhookId     String
   event         String
-  payload       String
+  payload       String       @db.Text
   responseCode  Int?
-  responseBody  String?
+  responseBody  String?      @db.Text
   success       Boolean  @default(false)
-  errorMessage  String?
+  errorMessage  String?      @db.Text
   attemptNumber Int      @default(1)
   duration      Int?
   createdAt     DateTime @default(now())
@@ -641,11 +642,11 @@ model Integration {
   name         String
   type         String
   provider     String?
-  config       String
+  config       String       @db.Text
   enabled      Boolean   @default(true)
   status       String    @default("active")
   lastSyncAt   DateTime?
-  errorMessage String?
+  errorMessage String?      @db.Text
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -657,12 +658,12 @@ model Integration {
 model Article {
   id            String           @id @default(cuid())
   title         String
-  content       String
+  content       String           @db.Text
   slug          String           @unique
   contentType   String           @default("richtext")
   categoryId    String?
   status        String           @default("draft")
-  tags          String?
+  tags          String?          @db.Text
   isPublic      Boolean          @default(true)
   views         Int              @default(0)
   helpfulVotes  Int              @default(0)
@@ -672,7 +673,7 @@ model Article {
   updatedByName String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
-  category      ArticleCategory? @relation(fields: [categoryId], references: [id])
+  category      ArticleCategory? @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([status])
   @@index([categoryId])
@@ -684,7 +685,7 @@ model Article {
 model ArticleCategory {
   id          String            @id @default(cuid())
   name        String            @unique
-  description String?
+  description String?              @db.Text
   slug        String            @unique
   parentId    String?
   order       Int               @default(0)
@@ -692,7 +693,7 @@ model ArticleCategory {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   articles    Article[]
-  parent      ArticleCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  parent      ArticleCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children    ArticleCategory[] @relation("CategoryHierarchy")
 
   @@index([parentId])
@@ -703,7 +704,7 @@ model ArticleCategory {
 model SLAPolicy {
   id                   String        @id @default(cuid())
   name                 String
-  description          String?
+  description          String?              @db.Text
   isDefault            Boolean       @default(false)
   isActive             Boolean       @default(true)
   lowResponseTime      Int?          @default(480)
@@ -715,16 +716,16 @@ model SLAPolicy {
   urgentResponseTime   Int?          @default(15)
   urgentResolutionTime Int?          @default(240)
   useBusinessHours     Boolean       @default(true)
-  businessHours        String?
+  businessHours        String?              @db.Text
   timezone             String        @default("UTC")
-  holidays             String?
+  holidays             String?              @db.Text
   escalationLevel1     Int           @default(80)
   escalationLevel2     Int           @default(95)
   pauseOnWaiting       Boolean       @default(true)
   pauseOnHold          Boolean       @default(true)
   pauseOffHours        Boolean       @default(true)
-  departmentIds        String?
-  categoryIds          String?
+  departmentIds        String?              @db.Text
+  categoryIds          String?              @db.Text
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
   timers               SLATimer[]
@@ -748,7 +749,7 @@ model SLATimer {
   completedAt      DateTime?
   breachedAt       DateTime?
   totalPausedTime  Int         @default(0)
-  pauseReason      String?
+  pauseReason      String?         @db.Text
   level1NotifiedAt DateTime?
   level2NotifiedAt DateTime?
   breachNotifiedAt DateTime?
@@ -793,14 +794,14 @@ model SLAEscalation {
   timerId           String?
   escalationLevel   Int
   escalationType    String
-  reason            String?
+  reason            String?          @db.Text
   priorityChanged   Boolean   @default(false)
   oldPriority       String?
   newPriority       String?
   reassigned        Boolean   @default(false)
   oldAssignee       String?
   newAssignee       String?
-  notifiedUsers     String?
+  notifiedUsers     String?          @db.Text
   notificationsSent Int       @default(0)
   escalatedAt       DateTime  @default(now())
   resolvedAt        DateTime?
@@ -823,7 +824,7 @@ model LiveChat {
   lastMessageAt     DateTime          @default(now())
   resolvedAt        DateTime?
   closedAt          DateTime?
-  tags              String?
+  tags              String?          @db.Text
   metadata          Json?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -842,14 +843,14 @@ model ScheduledCallback {
   customerEmail    String
   phoneNumber      String
   countryCode      String    @default("+91")
-  reason           String?   // Customer's reason for requesting callback
+  reason           String?      @db.Text // Customer's reason for requesting callback
   scheduledTime    DateTime
   rescheduledTime  DateTime?
   status           String    @default("pending")
   agentId          String?
-  denialReason     String?
+  denialReason     String?      @db.Text
   rescheduleStatus String?
-  notes            String?
+  notes            String?      @db.Text
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   agent            Agent?    @relation(fields: [agentId], references: [id])
@@ -863,9 +864,9 @@ model ScheduledCallback {
 model Tutorial {
   id           String   @id @default(cuid())
   title        String
-  description  String?
+  description  String?      @db.Text
   category     String
-  content      String?
+  content      String?      @db.Text
   videoUrl     String?
   thumbnailUrl String?
   order        Int      @default(0)
@@ -899,7 +900,7 @@ model LiveChatMessage {
   senderId    String
   senderType  String
   senderName  String
-  content     String
+  content     String       @db.Text
   timestamp   DateTime @default(now())
   read        Boolean  @default(false)
   attachments Json?
@@ -930,7 +931,7 @@ model OTPVerification {
 model Macro {
   id        String   @id @default(cuid())
   name      String
-  content   String // Allow long messages (SQLite supports unlimited text)
+  content   String   @db.Text // Allow long messages
   shortcut  String?  @unique // e.g., "/welcome"
   category  String? // e.g., "Support", "Sales"
   isActive  Boolean  @default(true)
@@ -945,7 +946,7 @@ model Macro {
 model IssueCategory {
   id            String         @id @default(cuid())
   name          String         @unique
-  description   String?
+  description   String?            @db.Text
   isActive      Boolean        @default(true)
   order         Int            @default(0)
   createdAt     DateTime       @default(now())
@@ -988,7 +989,7 @@ model InternalMessage {
   senderId   String
   senderType String // "admin" or "agent"
 
-  content  String
+  content  String   @db.Text
   metadata Json? // For attachments: { attachments: [{ url, type, name, size }] }
   read     Boolean   @default(false)
   readAt   DateTime?
@@ -1004,7 +1005,7 @@ model InternalMessage {
 model CannedResponse {
   id        String   @id @default(cuid())
   shortcut  String // e.g., "wifi", "reset", "refund"
-  content   String // The full message text
+  content   String   @db.Text // The full message text
   category  String? // Optional category for organization
   isPublic  Boolean  @default(false) // Shared with all agents/admins
   createdBy String // Admin or Agent ID
@@ -1025,7 +1026,7 @@ model Workflow {
   name        String
   trigger     String             // e.g., "TICKET_CREATED", "TICKET_UPDATED", "TICKET_ASSIGNED"
   isActive    Boolean            @default(true)
-  description String?
+  description String?                @db.Text
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
@@ -1041,7 +1042,7 @@ model WorkflowCondition {
   workflowId  String
   field       String   // e.g., "status", "priority", "departmentId"
   operator    String   // e.g., "EQUALS", "NOT_EQUALS", "CONTAINS", "GREATER_THAN", "LESS_THAN"
-  value       String   // The value to compare against
+  value       String   @db.Text // The value to compare against
   workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
   @@index([workflowId])
@@ -1051,7 +1052,7 @@ model WorkflowAction {
   id          String   @id @default(cuid())
   workflowId  String
   actionType  String   // e.g., "ASSIGN_AGENT", "SEND_EMAIL", "UPDATE_STATUS", "ADD_TAG", "SET_PRIORITY"
-  payload     String   // JSON string for flexibility: { "agentId": "...", "status": "...", etc. }
+  payload     String   @db.Text // JSON string for flexibility: { "agentId": "...", "status": "...", etc. }
   order       Int      @default(0) // Order of execution
   workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
