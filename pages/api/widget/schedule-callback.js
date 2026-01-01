@@ -1,4 +1,5 @@
 // Widget API - Schedule Callback
+import prisma from '@/lib/prisma';
 import { sendEmail } from '../../../lib/email/service';
 import { createNotification } from '../../../lib/utils/notifications';
 
@@ -111,7 +112,6 @@ export default async function handler(req, res) {
 
     // Send email to admin
     const customerName = name || customer.name || 'Guest';
-import prisma from '@/lib/prisma';
     const formattedDate = new Date(scheduledTime).toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',

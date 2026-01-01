@@ -1,4 +1,5 @@
 // Widget API - Verify OTP for email verification
+import prisma from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 
 
@@ -17,7 +18,6 @@ export default async function handler(req, res) {
       return res.status(400).json({
         success: false,
         message: 'Email and OTP are required'
-import prisma from '@/lib/prisma';
       });
     }
 
