@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
       // Parse enabled placements (stored as JSON)
       let enabledPlacements = {
-        adminLogin: true,
+        adminLogin: false, // Disabled for admin login
         customerTicket: false,
         passwordReset: false
       };
@@ -32,7 +32,11 @@ export default async function handler(req, res) {
       const placementsValue = settingsObj[SETTINGS_KEYS.CAPTCHA_ENABLED_PLACEMENTS];
       if (placementsValue) {
         try {
-          enabledPlacements = JSON.parse(placementsValue);
+          const parsed = JSON.parse(placementsValue);
+          enabledPlacements = {
+            ...parsed,
+            adminLogin: false // Force disable for admin login
+          };
         } catch (e) {
           console.error('Error parsing captcha placements:', e);
         }
