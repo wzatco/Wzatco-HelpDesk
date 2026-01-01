@@ -1,16 +1,14 @@
 import { SLAService } from '../../../../lib/sla-service';
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 
 // Prisma singleton pattern
-const globalForPrisma = globalThis;
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 /**
  * SLA Actions Endpoint
  * Handle SLA actions like start, pause, resume, stop timers
  */
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   try {
     if (req.method === 'POST') {
       const { action, conversationId, priority, departmentId, category, timerType, reason } = req.body;

@@ -3,10 +3,7 @@ import { z } from 'zod';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
-// Use singleton pattern for Prisma client
-const globalForPrisma = globalThis;
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+
 
 // Zod schema for macro validation
 const createMacroSchema = z.object({
@@ -20,6 +17,7 @@ const createMacroSchema = z.object({
 const updateMacroSchema = createMacroSchema.partial();
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   try {
     const userId = getCurrentUserId(req);
 

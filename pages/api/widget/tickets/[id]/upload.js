@@ -1,12 +1,9 @@
 // Widget API - Upload files for ticket messages
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import fs from 'fs';
 import path from 'path';
 
 // Prisma singleton pattern
-const globalForPrisma = globalThis;
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export const config = {
   api: {
@@ -15,6 +12,7 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }

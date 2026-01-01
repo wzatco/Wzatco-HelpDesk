@@ -1,13 +1,11 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth';
 import { checkPermissionOrFail } from '@/lib/permissions';
 
 // Prisma singleton pattern
-const globalForPrisma = globalThis;
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   const { id } = req.query;
   const userId = getCurrentUserId(req);
 

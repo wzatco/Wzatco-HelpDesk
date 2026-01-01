@@ -1,9 +1,6 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 
 // Prisma singleton pattern
-const globalForPrisma = globalThis;
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 /**
  * SLA Report API
@@ -11,6 +8,7 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
  * Properly handles firstResponseAt timestamps
  */
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Method not allowed' });
   }

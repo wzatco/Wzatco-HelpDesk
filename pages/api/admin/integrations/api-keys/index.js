@@ -1,10 +1,7 @@
-import prisma from '@/lib/prisma';
+import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 import crypto from 'crypto';
 
 // Prisma singleton pattern
-const globalForPrisma = globalThis;
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 // Generate a secure API key
 function generateApiKey(prefix = 'sk_live_') {
@@ -18,6 +15,7 @@ function generateApiKey(prefix = 'sk_live_') {
 }
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method === 'GET') {
     try {
       const { enabled } = req.query;
