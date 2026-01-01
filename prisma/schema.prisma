@@ -5,8 +5,7 @@ generator client {
 
 datasource db {
   provider     = "mysql"
-  // url          = env("DATABASE_URL")
-  url          = "mysql://u394742293_HD_demo:Rohan_1025@82.180.140.4:3306/u394742293_HD_demo?connection_limit=5"
+  url          = env("DATABASE_URL")
   relationMode = "prisma"
 }
 
