@@ -1,17 +1,6 @@
 // Public API - Fetch all published Knowledge Base articles
-import { PrismaClient } from '@prisma/client';
+import prisma, { ensurePrismaConnected } from '../../../lib/prisma';
 import { blocksToPlainText, isBlocksContent } from '@/utils/blockRenderer';
-
-// Prisma singleton pattern
-let prisma;
-if (process.env.NODE_ENV === 'production') {
-  prisma = new PrismaClient();
-} else {
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
-  }
-  prisma = global.prisma;
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -20,6 +9,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensurePrismaConnected();
     const { category, categoryId, search } = req.query;
     
     // Build where clause - ONLY published and public articles (strict filter)
