@@ -10,11 +10,17 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       // Get all captcha settings
-      const settings = await prisma.settings.findMany({
-        where: {
-          category: 'captcha'
-        }
-      });
+      let settings = [];
+      try {
+        settings = await prisma.settings.findMany({
+          where: {
+            category: 'captcha'
+          }
+        });
+      } catch (dbError) {
+        console.error('Database error fetching captcha settings:', dbError);
+        // Continue with empty settings array - will use defaults
+      }
 
       // Convert to key-value object
       const settingsObj = {};
@@ -23,6 +29,7 @@ export default async function handler(req, res) {
       });
 
       // Parse enabled placements (stored as JSON)
+      // Always default to disabled for adminLogin
       let enabledPlacements = {
         adminLogin: false, // Disabled for admin login
         customerTicket: false,
@@ -52,7 +59,19 @@ export default async function handler(req, res) {
       res.status(200).json({ success: true, settings: result });
     } catch (error) {
       console.error('Error fetching captcha settings:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      // Return default settings even on error
+      res.status(200).json({ 
+        success: true, 
+        settings: {
+          captchaLength: 6,
+          captchaType: 'alphanumeric',
+          enabledPlacements: {
+            adminLogin: false, // Disabled for admin login
+            customerTicket: false,
+            passwordReset: false
+          }
+        }
+      });
     }
   } else if (req.method === 'PATCH') {
     try {
