@@ -7,6 +7,7 @@ import { generateCustomerId, getNextCustomerSequence, getCategoryCode, getProduc
  * This should be run once to migrate existing customers
  */
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }

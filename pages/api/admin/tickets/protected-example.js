@@ -10,6 +10,7 @@ import { checkPermissionOrFail } from '../../../../lib/permissions';
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   try {
     // Get user ID from session/token/header
     // TODO: Replace this with your actual authentication method

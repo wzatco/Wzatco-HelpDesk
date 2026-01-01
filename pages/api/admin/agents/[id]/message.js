@@ -2,6 +2,7 @@ import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   const { id } = req.query; // agent id
 
   if (req.method === 'POST') {

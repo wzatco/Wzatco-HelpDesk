@@ -5,6 +5,7 @@ import prisma, { ensurePrismaConnected } from '@/lib/prisma';
  * Increment usage count when a template is used
  */
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }

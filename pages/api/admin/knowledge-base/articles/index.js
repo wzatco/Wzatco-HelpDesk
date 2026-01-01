@@ -3,6 +3,7 @@ import { generateUniqueSlug } from '@/lib/articleSlugGenerator';
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method === 'GET') {
     try {
       const { status, category, search } = req.query;

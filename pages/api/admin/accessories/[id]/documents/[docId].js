@@ -4,6 +4,7 @@ import path from 'path';
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   const { id, docId } = req.query;
 
   if (req.method === 'GET') {

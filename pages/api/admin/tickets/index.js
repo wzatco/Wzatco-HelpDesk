@@ -601,6 +601,7 @@ function generateTicketNumber() {
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   // Get current user ID from auth token or header
   const userId = getCurrentUserId(req);
   

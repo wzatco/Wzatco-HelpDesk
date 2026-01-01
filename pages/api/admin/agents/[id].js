@@ -5,6 +5,7 @@ import { getCurrentUserId } from '@/lib/auth';
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   const { id } = req.query;
 
   if (req.method === 'GET') {

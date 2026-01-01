@@ -3,6 +3,7 @@ import { updateTATMetrics } from '../../../../lib/utils/tat';
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method === 'GET') {
     try {
       const { conversationId, ticketNumber, agentId, startDate, endDate } = req.query;

@@ -2,6 +2,7 @@ import prisma, { ensurePrismaConnected } from '@/lib/prisma';
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method === 'GET') {
     try {
       const tags = await prisma.tag.findMany({

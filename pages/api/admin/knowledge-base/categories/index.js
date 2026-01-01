@@ -3,6 +3,7 @@ import { generateSlug } from '@/lib/articleSlugGenerator';
 
 
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method === 'GET') {
     try {
       const includeInactive = req.query?.includeInactive === 'true';

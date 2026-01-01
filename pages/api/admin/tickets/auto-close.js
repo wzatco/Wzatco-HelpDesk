@@ -8,6 +8,7 @@ import { notifyStatusChange } from '@/lib/utils/notifications';
  * This should be called periodically (e.g., via cron job or scheduled task)
  */
 export default async function handler(req, res) {
+  await ensurePrismaConnected();
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
