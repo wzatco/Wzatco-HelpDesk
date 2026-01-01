@@ -1,4 +1,4 @@
-import prisma from '../../../../lib/prisma';
+import prisma from '../../../../../lib/prisma';
 import { getCurrentAgent } from '../../../../../lib/utils/agent-auth';
 
 /**

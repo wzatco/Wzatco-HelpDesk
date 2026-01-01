@@ -1,8 +1,7 @@
 import prisma from '@/lib/prisma';
 
 // Widget API - Fetch single Knowledge Base article
-to prevent connection leaks
-
+// Prisma client is imported to prevent connection leaks
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
