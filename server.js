@@ -10,8 +10,15 @@ const { Server } = require('socket.io');
 // ============================================================
 // ENVIRONMENT CONFIGURATION - Multi-Source Loading
 // ============================================================
-// Try to load dotenv configurations from multiple sources
-const envFiles = ['.env', '.env.production', '.env.local'];
+// Load environment files based on NODE_ENV
+const nodeEnv = process.env.NODE_ENV || 'development';
+const isProduction = nodeEnv === 'production';
+
+// Define environment files to load based on mode
+const envFiles = isProduction
+  ? ['.env', '.env.production']  // Production: Don't load .env.local
+  : ['.env', '.env.development', '.env.local'];  // Development: Load all
+
 envFiles.forEach(file => {
   const envPath = path.resolve(process.cwd(), file);
   if (fs.existsSync(envPath)) {
