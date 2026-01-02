@@ -6,3 +6,8 @@ node_modules/
 .env.production.local
 .env.development.local
 .DS_Store
+
+# amplify
+.amplify
+amplify_outputs*
+amplifyconfiguration*

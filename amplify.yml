@@ -3,7 +3,10 @@ frontend:
   phases:
     preBuild:
       commands:
+        - echo "Node version:" && node --version
+        - echo "NPM version:" && npm --version
         - npm install
+        - npx prisma generate
     build:
       commands:
         - npm run build
