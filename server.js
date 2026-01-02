@@ -10,13 +10,18 @@ const { Server } = require('socket.io');
 // ============================================================
 // ENVIRONMENT CONFIGURATION - Multi-Source Loading
 // ============================================================
-// Load environment files based on NODE_ENV
+// Priority Order (Highest to Lowest):
+// 1. .env.production (highest priority - loaded last, overrides everything)
+// 2. .env (fallback - loaded first)
+// 3. System environment variables (NODE_ENV, etc. - already in process.env)
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 
-// Define environment files to load based on mode
+// Define environment files to load
+// Load .env first (base), then .env.production (overrides .env)
+// This ensures .env.production has highest priority among files
 const envFiles = isProduction
-  ? ['.env', '.env.production']  // Production: Don't load .env.local
+  ? ['.env', '.env.production']  // Production: .env first, then .env.production (highest priority)
   : ['.env', '.env.development', '.env.local'];  // Development: Load all
 
 envFiles.forEach(file => {
@@ -26,6 +31,9 @@ envFiles.forEach(file => {
     console.log(`✅ Loaded env from: ${file}`);
   }
 });
+
+// Note: System environment variables (set in Hostinger panel) have highest priority
+// as they're already in process.env before dotenv loads files
 
 // ============================================================
 // PORT DETECTION - Hostinger Cloud Compatible

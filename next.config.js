@@ -9,6 +9,14 @@ const nextConfig = {
       bodySizeLimit: '10mb',
     },
   },
+  // Ensure static files are properly generated and served
+  generateBuildId: async () => {
+    // Use a consistent build ID for better caching
+    return process.env.BUILD_ID || `build-${Date.now()}`;
+  },
+  // Optimize static file serving
+  poweredByHeader: false,
+  compress: true,
   webpack: (config) => {
     config.resolve.extensionAlias = {
       '.js': ['.js', '.ts', '.tsx'],
