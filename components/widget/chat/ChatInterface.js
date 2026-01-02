@@ -57,6 +57,7 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
   // Projector images upload state (for ticket creation)
   const [projectorImages, setProjectorImages] = useState([]);
   const projectorImagesInputRef = useRef(null);
+  const [fileSizeError, setFileSizeError] = useState(null); // { totalSizeMB: string, maxSizeMB: string, oversizedImages: Array }
 
   // Get steps array dynamically based on current products/accessories
   const getTicketSteps = () => [
@@ -358,17 +359,139 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
         // Reset ticket creation state
         setTicketCreationState({ isActive: false, currentStep: 0, collectedData: {} });
       } else {
-        throw new Error(data.error || 'Failed to create ticket');
+        // Check if it's a file size error
+        if (data.error && (data.error.includes('exceeded') || data.error.includes('maxTotalFileSize') || data.error.includes('file size') || data.errorType === 'FILE_SIZE_EXCEEDED')) {
+          // Extract file size information from error
+          const totalSizeMB = data.receivedSizeMB || (data.error.match(/(\d+(?:\.\d+)?)\s*(?:bytes|MB|KB)/i) ? (parseFloat(data.error.match(/(\d+(?:\.\d+)?)\s*(?:bytes|MB|KB)/i)[1]) / (1024 * 1024)).toFixed(2) : 'unknown');
+          
+          // Restore projector images from base64 data if they were cleared
+          if (projectorImages.length === 0 && ticketData.projectorImages && Array.isArray(ticketData.projectorImages)) {
+            const restoredImages = await Promise.all(
+              ticketData.projectorImages.map(async (base64Data, idx) => {
+                try {
+                  const response = await fetch(base64Data);
+                  const blob = await response.blob();
+                  const file = new File([blob], `projector_${['front', 'back', 'left', 'right'][idx] || `side${idx + 1}`}.jpg`, { type: 'image/jpeg' });
+                  return {
+                    file,
+                    preview: base64Data,
+                    name: `Image ${idx + 1}`,
+                    sizeMB: (file.size / (1024 * 1024)).toFixed(2)
+                  };
+                } catch (error) {
+                  console.error(`Error restoring image ${idx + 1}:`, error);
+                  return null;
+                }
+              })
+            );
+            setProjectorImages(restoredImages.filter(img => img !== null));
+          }
+          
+          // Calculate sizes from current projectorImages or from restored data
+          const imageSizes = projectorImages.length > 0 
+            ? projectorImages.map((img, idx) => ({
+                index: idx,
+                name: img.name || `Image ${idx + 1}`,
+                sizeMB: img.sizeMB || (img.file?.size ? (img.file.size / (1024 * 1024)).toFixed(2) : '0.00'),
+                side: ['Front', 'Back', 'Left', 'Right'][idx] || `Side ${idx + 1}`
+              }))
+            : ticketData.projectorImages?.map((_, idx) => ({
+                index: idx,
+                name: `Image ${idx + 1}`,
+                sizeMB: 'unknown',
+                side: ['Front', 'Back', 'Left', 'Right'][idx] || `Side ${idx + 1}`
+              })) || [];
+          
+          setFileSizeError({
+            type: 'total',
+            message: 'Total file size exceeds the limit',
+            totalSizeMB: totalSizeMB,
+            maxSizeMB: data.maxSizeMB || '5',
+            oversizedImages: imageSizes
+          });
+
+          // Show user-friendly error message
+          const errorMessage = {
+            id: (Date.now() + 1).toString(),
+            type: 'bot',
+            content: `❌ The total size of your images (${totalSizeMB} MB) exceeds the limit of 5 MB. Please remove or compress some images and try again. You can click on the images above to remove them.`,
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, errorMessage]);
+        } else {
+          throw new Error(data.error || 'Failed to create ticket');
+        }
       }
     } catch (error) {
       console.error('Error creating ticket:', error);
-      const errorMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: `❌ I'm sorry, there was an error creating your ticket. Please try again or contact support directly.`,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      
+      // Check if error message contains file size information
+      if (error.message && (error.message.includes('exceeded') || error.message.includes('maxTotalFileSize') || error.message.includes('file size'))) {
+        const sizeMatch = error.message.match(/(\d+(?:\.\d+)?)\s*(?:bytes|MB|KB)/i);
+        const totalSizeMB = sizeMatch ? (parseFloat(sizeMatch[1]) / (1024 * 1024)).toFixed(2) : 'unknown';
+        
+        // Restore projector images from ticketData if they were cleared
+        if (projectorImages.length === 0 && ticketData.projectorImages && Array.isArray(ticketData.projectorImages)) {
+          Promise.all(
+            ticketData.projectorImages.map(async (base64Data, idx) => {
+              try {
+                const response = await fetch(base64Data);
+                const blob = await response.blob();
+                const file = new File([blob], `projector_${['front', 'back', 'left', 'right'][idx] || `side${idx + 1}`}.jpg`, { type: 'image/jpeg' });
+                return {
+                  file,
+                  preview: base64Data,
+                  name: `Image ${idx + 1}`,
+                  sizeMB: (file.size / (1024 * 1024)).toFixed(2)
+                };
+              } catch (err) {
+                console.error(`Error restoring image ${idx + 1}:`, err);
+                return null;
+              }
+            })
+          ).then(restoredImages => {
+            setProjectorImages(restoredImages.filter(img => img !== null));
+          });
+        }
+        
+        const imageSizes = projectorImages.length > 0 
+          ? projectorImages.map((img, idx) => ({
+              index: idx,
+              name: img.name || `Image ${idx + 1}`,
+              sizeMB: img.sizeMB || (img.file?.size ? (img.file.size / (1024 * 1024)).toFixed(2) : '0.00'),
+              side: ['Front', 'Back', 'Left', 'Right'][idx] || `Side ${idx + 1}`
+            }))
+          : ticketData.projectorImages?.map((_, idx) => ({
+              index: idx,
+              name: `Image ${idx + 1}`,
+              sizeMB: 'unknown',
+              side: ['Front', 'Back', 'Left', 'Right'][idx] || `Side ${idx + 1}`
+            })) || [];
+        
+        setFileSizeError({
+          type: 'total',
+          message: 'Total file size exceeds the limit',
+          totalSizeMB: totalSizeMB,
+          maxSizeMB: '5',
+          oversizedImages: imageSizes
+        });
+
+        const errorMessage = {
+          id: (Date.now() + 1).toString(),
+          type: 'bot',
+          content: `❌ The total size of your images (${totalSizeMB} MB) exceeds the limit of 5 MB. Please remove or compress some images and try again.`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      } else {
+        const errorMessage = {
+          id: (Date.now() + 1).toString(),
+          type: 'bot',
+          content: `❌ I'm sorry, there was an error creating your ticket: ${error.message || 'Unknown error'}. Please try again or contact support directly.`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
     } finally {
       setIsTyping(false);
     }
@@ -1168,23 +1291,51 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
 
     // Validate file count
     if (projectorImages.length + files.length > 4) {
-      alert('You can only upload 4 images maximum');
+      setFileSizeError({
+        type: 'count',
+        message: 'You can only upload 4 images maximum'
+      });
       return;
     }
 
     // Validate each file
     const validFiles = [];
+    const oversizedFiles = [];
+    
     for (const file of files) {
       if (!file.type.startsWith('image/')) {
-        alert(`${file.name} is not an image file`);
+        setFileSizeError({
+          type: 'format',
+          message: `${file.name} is not an image file. Please select image files only.`,
+          fileName: file.name
+        });
         continue;
       }
+      
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       if (file.size > 5 * 1024 * 1024) {
-        alert(`${file.name} is larger than 5MB`);
+        oversizedFiles.push({
+          name: file.name,
+          sizeMB: fileSizeMB
+        });
         continue;
       }
       validFiles.push(file);
     }
+
+    // Show error for oversized files
+    if (oversizedFiles.length > 0) {
+      setFileSizeError({
+        type: 'individual',
+        message: 'Some images are too large',
+        oversizedFiles: oversizedFiles,
+        maxSizeMB: '5'
+      });
+      return;
+    }
+
+    // Clear any previous errors
+    setFileSizeError(null);
 
     // Read files as base64
     const filePromises = validFiles.map(file => {
@@ -1194,7 +1345,8 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
           resolve({
             file,
             preview: reader.result,
-            name: file.name
+            name: file.name,
+            sizeMB: (file.size / (1024 * 1024)).toFixed(2)
           });
         };
         reader.readAsDataURL(file);
@@ -1202,7 +1354,39 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
     });
 
     Promise.all(filePromises).then(newImages => {
-      setProjectorImages(prev => [...prev, ...newImages]);
+      setProjectorImages(prev => {
+        const updated = [...prev, ...newImages];
+        
+        // Check total size after adding new images
+        const totalSize = updated.reduce((sum, img) => sum + img.file.size, 0);
+        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+        const maxTotalSize = 5 * 1024 * 1024; // 5MB total limit
+        
+        if (totalSize > maxTotalSize) {
+          // Find which images are contributing to the excess
+          const oversizedImages = updated
+            .map((img, idx) => ({
+              index: idx,
+              name: img.name || `Image ${idx + 1}`,
+              sizeMB: img.sizeMB || (img.file.size / (1024 * 1024)).toFixed(2)
+            }))
+            .filter(img => parseFloat(img.sizeMB) > 1.25); // Images larger than 1.25MB are likely culprits
+          
+          setFileSizeError({
+            type: 'total',
+            message: 'Total size of all images exceeds the limit',
+            totalSizeMB: totalSizeMB,
+            maxSizeMB: '5',
+            oversizedImages: oversizedImages.length > 0 ? oversizedImages : updated.map((img, idx) => ({
+              index: idx,
+              name: img.name || `Image ${idx + 1}`,
+              sizeMB: img.sizeMB || (img.file.size / (1024 * 1024)).toFixed(2)
+            }))
+          });
+        }
+        
+        return updated;
+      });
     });
   };
 
@@ -1212,9 +1396,39 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
 
   const handleProjectorImagesSubmit = async () => {
     if (projectorImages.length !== 4) {
-      alert('Please upload exactly 4 images (one for each side of the projector)');
+      setFileSizeError({
+        type: 'count',
+        message: 'Please upload exactly 4 images (one for each side of the projector)'
+      });
       return;
     }
+
+    // Check total file size before submitting
+    const totalSize = projectorImages.reduce((sum, img) => sum + img.file.size, 0);
+    const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+    const maxTotalSize = 5 * 1024 * 1024; // 5MB total limit
+
+    if (totalSize > maxTotalSize) {
+      // Find which images are contributing to the excess
+      const oversizedImages = projectorImages.map((img, idx) => ({
+        index: idx,
+        name: img.name || `Image ${idx + 1}`,
+        sizeMB: img.sizeMB || (img.file.size / (1024 * 1024)).toFixed(2),
+        side: ['Front', 'Back', 'Left', 'Right'][idx] || `Side ${idx + 1}`
+      }));
+
+      setFileSizeError({
+        type: 'total',
+        message: 'Total size of all images exceeds the limit',
+        totalSizeMB: totalSizeMB,
+        maxSizeMB: '5',
+        oversizedImages: oversizedImages
+      });
+      return;
+    }
+
+    // Clear any errors
+    setFileSizeError(null);
 
     // Convert to base64 array
     const imagesData = projectorImages.map(img => img.preview);
@@ -1834,24 +2048,195 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
                                     {/* Image preview grid */}
                                     {projectorImages.length > 0 && (
                                       <div className="grid grid-cols-2 gap-3 mb-3">
-                                        {projectorImages.map((img, idx) => (
-                                          <div key={idx} className="relative group">
-                                            <img
-                                              src={img.preview}
-                                              alt={`Projector ${idx + 1}`}
-                                              className="w-full h-32 object-cover rounded-lg border-2 border-purple-300 dark:border-purple-600"
-                                            />
-                                            <button
-                                              onClick={() => handleRemoveProjectorImage(idx)}
-                                              className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                                            >
-                                              <X className="w-4 h-4" />
-                                            </button>
-                                            <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                                              Image {idx + 1}
+                                        {projectorImages.map((img, idx) => {
+                                          const sideNames = ['Front', 'Back', 'Left', 'Right'];
+                                          const sideName = sideNames[idx] || `Side ${idx + 1}`;
+                                          const fileSizeMB = img.sizeMB || (img.file ? (img.file.size / (1024 * 1024)).toFixed(2) : '0.00');
+                                          
+                                          return (
+                                            <div key={idx} className="relative group">
+                                              <img
+                                                src={img.preview}
+                                                alt={`Projector ${sideName}`}
+                                                className="w-full h-32 object-cover rounded-lg border-2 border-purple-300 dark:border-purple-600"
+                                              />
+                                              <button
+                                                onClick={() => {
+                                                  handleRemoveProjectorImage(idx);
+                                                  setFileSizeError(null); // Clear error when image is removed
+                                                }}
+                                                className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100 z-10"
+                                                title="Remove this image"
+                                              >
+                                                <X className="w-4 h-4" />
+                                              </button>
+                                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 rounded-b-lg">
+                                                <div className="text-white text-xs font-medium">{sideName}</div>
+                                                <div className="text-white/80 text-xs">{fileSizeMB} MB</div>
+                                              </div>
                                             </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+
+                                    {/* File Size Error Display */}
+                                    {fileSizeError && (
+                                      <div className="mb-3 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-lg">
+                                        <div className="flex items-start gap-3">
+                                          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                                          <div className="flex-1">
+                                            <h4 className="font-semibold text-red-900 dark:text-red-300 mb-2">
+                                              {fileSizeError.type === 'total' ? 'Total File Size Exceeded' : 
+                                               fileSizeError.type === 'individual' ? 'Image Too Large' :
+                                               fileSizeError.type === 'count' ? 'Too Many Images' :
+                                               'File Upload Error'}
+                                            </h4>
+                                            
+                                            {fileSizeError.type === 'total' && (
+                                              <>
+                                                <p className="text-sm text-red-800 dark:text-red-400 mb-3">
+                                                  The total size of all images is <span className="font-bold">{fileSizeError.totalSizeMB} MB</span>, which exceeds the limit of <span className="font-bold">{fileSizeError.maxSizeMB} MB</span>.
+                                                </p>
+                                                {fileSizeError.oversizedImages && fileSizeError.oversizedImages.length > 0 && (
+                                                  <div className="mb-3">
+                                                    <p className="text-sm font-medium text-red-900 dark:text-red-300 mb-2">Image sizes:</p>
+                                                    <ul className="text-sm text-red-800 dark:text-red-400 space-y-1">
+                                                      {fileSizeError.oversizedImages.map((img, idx) => (
+                                                        <li key={idx} className="flex items-center justify-between">
+                                                          <span>{img.side || img.name || `Image ${img.index + 1}`}:</span>
+                                                          <span className="font-semibold">{img.sizeMB} MB</span>
+                                                        </li>
+                                                      ))}
+                                                    </ul>
+                                                  </div>
+                                                )}
+                                                <p className="text-sm text-red-800 dark:text-red-400 mb-2">
+                                                  <strong>What to do:</strong>
+                                                </p>
+                                                <ul className="text-sm text-red-800 dark:text-red-400 list-disc list-inside space-y-1 mb-3">
+                                                  <li>Click the <strong>X</strong> button on larger images to remove them</li>
+                                                  <li>Compress your images before uploading</li>
+                                                  <li>Try uploading fewer images at once</li>
+                                                </ul>
+                                              </>
+                                            )}
+                                            
+                                            {fileSizeError.type === 'individual' && fileSizeError.oversizedFiles && (
+                                              <>
+                                                <p className="text-sm text-red-800 dark:text-red-400 mb-2">
+                                                  The following images exceed {fileSizeError.maxSizeMB} MB:
+                                                </p>
+                                                <ul className="text-sm text-red-800 dark:text-red-400 list-disc list-inside space-y-1 mb-2">
+                                                  {fileSizeError.oversizedFiles.map((file, idx) => (
+                                                    <li key={idx}>
+                                                      <strong>{file.name}</strong>: {file.sizeMB} MB
+                                                    </li>
+                                                  ))}
+                                                </ul>
+                                                <p className="text-sm text-red-800 dark:text-red-400">
+                                                  Please compress these images or select smaller files.
+                                                </p>
+                                              </>
+                                            )}
+                                            
+                                            {(fileSizeError.type === 'count' || fileSizeError.type === 'format') && (
+                                              <p className="text-sm text-red-800 dark:text-red-400">
+                                                {fileSizeError.message}
+                                              </p>
+                                            )}
+                                            
+                                            <button
+                                              onClick={() => setFileSizeError(null)}
+                                              className="mt-3 px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-700 dark:hover:bg-red-600 transition-colors"
+                                            >
+                                              Got it
+                                            </button>
                                           </div>
-                                        ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* File Size Error Display */}
+                                    {fileSizeError && (
+                                      <div className="mb-3 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-lg">
+                                        <div className="flex items-start gap-3">
+                                          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                                          <div className="flex-1">
+                                            <h4 className="font-semibold text-red-900 dark:text-red-300 mb-2">
+                                              {fileSizeError.type === 'total' ? 'Total File Size Exceeded' : 
+                                               fileSizeError.type === 'individual' ? 'Image Too Large' :
+                                               fileSizeError.type === 'count' ? 'Too Many Images' :
+                                               'File Upload Error'}
+                                            </h4>
+                                            
+                                            {fileSizeError.type === 'total' && (
+                                              <>
+                                                <p className="text-sm text-red-800 dark:text-red-400 mb-3">
+                                                  The total size of all images is <span className="font-bold">{fileSizeError.totalSizeMB} MB</span>, which exceeds the limit of <span className="font-bold">{fileSizeError.maxSizeMB} MB</span>.
+                                                </p>
+                                                {fileSizeError.oversizedImages && fileSizeError.oversizedImages.length > 0 && (
+                                                  <div className="mb-3">
+                                                    <p className="text-sm font-medium text-red-900 dark:text-red-300 mb-2">Image sizes:</p>
+                                                    <ul className="text-sm text-red-800 dark:text-red-400 space-y-1">
+                                                      {fileSizeError.oversizedImages.map((img, idx) => (
+                                                        <li key={idx} className="flex items-center justify-between">
+                                                          <span>{img.side || img.name || `Image ${img.index + 1}`}:</span>
+                                                          <span className="font-semibold">{img.sizeMB} MB</span>
+                                                        </li>
+                                                      ))}
+                                                    </ul>
+                                                  </div>
+                                                )}
+                                                <p className="text-sm text-red-800 dark:text-red-400 mb-2">
+                                                  <strong>What to do:</strong>
+                                                </p>
+                                                <ul className="text-sm text-red-800 dark:text-red-400 list-disc list-inside space-y-1 mb-3">
+                                                  <li>Click the <strong>X</strong> button on larger images to remove them</li>
+                                                  <li>Compress your images before uploading</li>
+                                                  <li>Try uploading fewer images at once</li>
+                                                </ul>
+                                              </>
+                                            )}
+                                            
+                                            {fileSizeError.type === 'individual' && fileSizeError.oversizedFiles && (
+                                              <>
+                                                <p className="text-sm text-red-800 dark:text-red-400 mb-2">
+                                                  The following images exceed {fileSizeError.maxSizeMB} MB:
+                                                </p>
+                                                <ul className="text-sm text-red-800 dark:text-red-400 list-disc list-inside space-y-1 mb-2">
+                                                  {fileSizeError.oversizedFiles.map((file, idx) => (
+                                                    <li key={idx}>
+                                                      <strong>{file.name}</strong>: {file.sizeMB} MB
+                                                    </li>
+                                                  ))}
+                                                </ul>
+                                                <p className="text-sm text-red-800 dark:text-red-400">
+                                                  Please compress these images or select smaller files.
+                                                </p>
+                                              </>
+                                            )}
+                                            
+                                            {fileSizeError.type === 'count' && (
+                                              <p className="text-sm text-red-800 dark:text-red-400">
+                                                {fileSizeError.message}
+                                              </p>
+                                            )}
+                                            
+                                            {fileSizeError.type === 'format' && (
+                                              <p className="text-sm text-red-800 dark:text-red-400">
+                                                {fileSizeError.message}
+                                              </p>
+                                            )}
+                                            
+                                            <button
+                                              onClick={() => setFileSizeError(null)}
+                                              className="mt-3 px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-700 dark:hover:bg-red-600 transition-colors"
+                                            >
+                                              Got it
+                                            </button>
+                                          </div>
+                                        </div>
                                       </div>
                                     )}
 
@@ -1879,12 +2264,21 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
 
                                     {/* Progress and submit */}
                                     <div className="flex items-center justify-between">
-                                      <span className="text-sm text-gray-600 dark:text-gray-400">
-                                        {projectorImages.length} of 4 images uploaded
-                                      </span>
+                                      <div className="flex flex-col">
+                                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                                          {projectorImages.length} of 4 images uploaded
+                                        </span>
+                                        {projectorImages.length > 0 && (
+                                          <span className={`text-xs ${projectorImages.reduce((sum, img) => sum + (img.file?.size || 0), 0) > 5 * 1024 * 1024 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500 dark:text-gray-500'}`}>
+                                            Total size: {(
+                                              projectorImages.reduce((sum, img) => sum + (img.file?.size || 0), 0) / (1024 * 1024)
+                                            ).toFixed(2)} MB / 5 MB
+                                          </span>
+                                        )}
+                                      </div>
                                       <button
                                         onClick={handleProjectorImagesSubmit}
-                                        disabled={projectorImages.length !== 4}
+                                        disabled={projectorImages.length !== 4 || (fileSizeError && fileSizeError.type === 'total')}
                                         className="px-6 py-2 bg-purple-600 dark:bg-purple-700 text-white rounded-lg font-medium hover:bg-purple-700 dark:hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                       >
                                         Continue

@@ -10,18 +10,13 @@ const { Server } = require('socket.io');
 // ============================================================
 // ENVIRONMENT CONFIGURATION - Multi-Source Loading
 // ============================================================
-// Priority Order (Highest to Lowest):
-// 1. .env.production (highest priority - loaded last, overrides everything)
-// 2. .env (fallback - loaded first)
-// 3. System environment variables (NODE_ENV, etc. - already in process.env)
+// Load environment files based on NODE_ENV
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 
-// Define environment files to load
-// Load .env first (base), then .env.production (overrides .env)
-// This ensures .env.production has highest priority among files
+// Define environment files to load based on mode
 const envFiles = isProduction
-  ? ['.env', '.env.production']  // Production: .env first, then .env.production (highest priority)
+  ? ['.env', '.env.production']  // Production: Don't load .env.local
   : ['.env', '.env.development', '.env.local'];  // Development: Load all
 
 envFiles.forEach(file => {
@@ -31,9 +26,6 @@ envFiles.forEach(file => {
     console.log(`✅ Loaded env from: ${file}`);
   }
 });
-
-// Note: System environment variables (set in Hostinger panel) have highest priority
-// as they're already in process.env before dotenv loads files
 
 // ============================================================
 // PORT DETECTION - Hostinger Cloud Compatible
@@ -57,13 +49,63 @@ async function startServer() {
   try {
     await app.prepare();
     console.log('✅ Next.js app prepared successfully');
+    
+    // Verify .next directory exists (build output)
+    const nextDir = path.join(process.cwd(), '.next');
+    if (!fs.existsSync(nextDir)) {
+      console.warn('⚠️ Warning: .next directory not found. Make sure to run "npm run build" before starting the server.');
+    } else {
+      console.log('✅ Next.js build directory found');
+    }
 
     const httpServer = createServer((req, res) => {
       const parsedUrl = parse(req.url, true);
       
-      // Let Next.js handle all routes including HMR
-      // Socket.IO will handle its own paths via the Server instance
-      handle(req, res, parsedUrl);
+      // Add error handling for unhandled errors
+      const originalEnd = res.end;
+      res.end = function(...args) {
+        // If response ended with error status, log it
+        if (res.statusCode >= 400 && !res.headersSent) {
+          console.error('❌ HTTP Error Response:', {
+            url: req.url,
+            method: req.method,
+            statusCode: res.statusCode,
+            statusMessage: res.statusMessage
+          });
+        }
+        return originalEnd.apply(this, args);
+      };
+      
+      // Wrap in try-catch for synchronous errors
+      try {
+        // Let Next.js handle all routes including static files, API routes, and pages
+        // This includes _app.js, _buildManifest.js, _ssgManifest.js, and chunk files
+        handle(req, res, parsedUrl);
+      } catch (error) {
+        // Catch synchronous errors
+        console.error('❌ Server Request Error:', {
+          url: req.url,
+          method: req.method,
+          error: error.message,
+          stack: error.stack
+        });
+        
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            error: error.message || 'Internal server error',
+            errorType: error.name || 'Error',
+            timestamp: new Date().toISOString(),
+            _errorDetails: {
+              message: error.message,
+              type: error.name,
+              stack: process.env.SHOW_ERRORS_IN_BROWSER === 'true' || !isProduction ? error.stack : undefined,
+              route: req.url,
+              method: req.method
+            }
+          });
+        }
+      }
     });
 
     // Initialize Socket.IO BEFORE attaching to server

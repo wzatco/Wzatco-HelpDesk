@@ -154,6 +154,10 @@ async function getAuthOptions() {
   },
 
   secret: process.env.NEXTAUTH_SECRET || 'your-secret-key-change-in-production',
+  
+  // Use NEXTAUTH_URL if provided, otherwise NextAuth will auto-detect from request
+  // This is recommended for production to avoid issues with reverse proxies
+  url: process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || undefined,
   };
 }
 

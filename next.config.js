@@ -9,12 +9,12 @@ const nextConfig = {
       bodySizeLimit: '10mb',
     },
   },
-  // Ensure static files are properly generated and served
+  // Ensure static files are generated and served correctly
   generateBuildId: async () => {
-    // Use a consistent build ID for better caching
+    // Use a consistent build ID or generate one
     return process.env.BUILD_ID || `build-${Date.now()}`;
   },
-  // Optimize static file serving
+  // Ensure proper static file handling
   poweredByHeader: false,
   compress: true,
   webpack: (config) => {

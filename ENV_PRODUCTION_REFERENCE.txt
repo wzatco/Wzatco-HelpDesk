@@ -1,7 +1,9 @@
 # ========================================
-# HOSTINGER PRODUCTION ENVIRONMENT VARIABLES
+# PRODUCTION ENVIRONMENT VARIABLES REFERENCE
 # ========================================
-# Copy these to your Hostinger dashboard
+# Copy these exact variable names to your .env.production file
+# OR to your Hostinger dashboard Environment Variables
+# All variable names verified against codebase - NO MISMATCHES
 # Last Updated: January 1, 2026
 # ========================================
 
@@ -10,32 +12,47 @@
 # ===========================================
 
 # Database Connection (MySQL - Hostinger Remote)
+# Used by: lib/prisma.js (Prisma Client)
 DATABASE_URL=mysql://u394742293_HD_demo:Rohan_1025@82.180.140.4:3306/u394742293_HD_demo
 
 # JWT Secret (Authentication)
+# Used by: pages/api/widget/otp/verify.js, lib/utils/agent-auth.js, lib/auth.js
 JWT_SECRET=f6da1e74a35dd310ca31f48d922f9da4ed45b25b5869100a099c2e522ac93e0357da8e7897552d33bd5f52cf030661a6de58744ae0cd5f7973143318f99e2453
 
 # NextAuth Secret (Session Management)
+# Used by: pages/api/auth/[...nextauth].js
 NEXTAUTH_SECRET=f6da1e74a35dd310ca31f48d922f9da4ed45b25b5869100a099c2e522ac93e0357da8e7897552d33bd5f52cf030661a6de58744ae0cd5f7973143318f99e2453
 
-# Application Base URL (Update with your actual domain)
-# ⚠️ IMPORTANT: Update this to match your actual production domain!
-NEXT_PUBLIC_BASE_URL=https://sienna-scorpion-646682.hostingersite.com
-
-# NextAuth URL (Recommended for production - use same as NEXT_PUBLIC_BASE_URL)
+# NextAuth URL (Recommended for production)
+# Used by: pages/api/auth/[...nextauth].js (falls back to NEXT_PUBLIC_BASE_URL if not set)
 NEXTAUTH_URL=https://sienna-scorpion-646682.hostingersite.com
 
-# Client URL (for Socket.IO CORS - use same as NEXT_PUBLIC_BASE_URL)
+# Application Base URL (Public - accessible in browser)
+# Used by: pages/api/admin/tickets/index.js, pages/api/admin/tickets/[id]/messages.js, pages/api/admin/callbacks/[id]/reschedule.js
+NEXT_PUBLIC_BASE_URL=https://sienna-scorpion-646682.hostingersite.com
+
+# Client URL (for Socket.IO CORS)
+# Used by: server.js (Socket.IO CORS configuration)
 CLIENT_URL=https://sienna-scorpion-646682.hostingersite.com
 
 # Node Environment
+# Used by: server.js, lib/prisma.js, lib/error-handler.js, pages/api/admin/tickets/index.js
 NODE_ENV=production
+
+# Server Port (Hostinger assigns this automatically)
+# Used by: server.js
+PORT=3000
 
 # ===========================================
 # 🟡 IMPORTANT - REQUIRED FOR FEATURES
 # ===========================================
 
+# HMAC Secret (API Encryption - Optional, falls back to JWT_SECRET)
+# Used by: lib/crypto-utils.js
+HMAC_SECRET=f6da1e74a35dd310ca31f48d922f9da4ed45b25b5869100a099c2e522ac93e0357da8e7897552d33bd5f52cf030661a6de58744ae0cd5f7973143318f99e2453
+
 # Email Configuration (Amazon SES)
+# Used by: lib/email/config.js
 MAIL_HOST=email-smtp.ap-south-1.amazonaws.com
 MAIL_PORT=465
 MAIL_ENCRYPTION=ssl
@@ -46,33 +63,32 @@ MAIL_FROM_NAME=Wzatco Support Desk
 MAIL_REPLY_TO=support@wzatco.com
 MAIL_DEBUG=false
 
-# HMAC Secret (API Encryption - Optional, falls back to JWT_SECRET)
-HMAC_SECRET=f6da1e74a35dd310ca31f48d922f9da4ed45b25b5869100a099c2e522ac93e0357da8e7897552d33bd5f52cf030661a6de58744ae0cd5f7973143318f99e2453
-
 # ===========================================
 # 🟢 OPTIONAL - CONFIGURE VIA ADMIN UI
 # ===========================================
 # Note: These can be set via Admin Dashboard → Settings
-# Only include them here if you prefer environment variables
+# Only include them here if you prefer environment variables over Admin UI
 
 # Google OAuth (Optional - Can be set via Admin UI instead)
+# Used by: pages/api/auth/[...nextauth].js (fallback if not in database)
 # GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 # GOOGLE_CLIENT_SECRET=your-google-client-secret
 
 # OpenAI API (Optional - Can be set via Admin UI instead)
+# Used by: pages/api/widget/chat/openai.js (fallback if not in database)
 # OPENAI_API_KEY=sk-your-openai-api-key-here
 
 # Anthropic API (Optional - Can be set via Admin UI instead)
+# Used by: pages/api/widget/chat/anthropic.js (fallback if not in database)
 # ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key-here
 
 # ===========================================
-# 📝 INSTRUCTIONS FOR HOSTINGER
+# ✅ VARIABLE NAME VERIFICATION COMPLETE
 # ===========================================
-# 1. Log in to your Hostinger dashboard
-# 2. Go to your website → Advanced → Environment Variables
-# 3. Add each variable one by one (click "+ Add Variable")
-# 4. Copy the variable name (left side) and value (right side)
-# 5. Save after adding all variables
-# 6. Rebuild/redeploy your application
+# All variable names above have been verified against the codebase:
+# - No typos or mismatches
+# - All names match exactly what's used in the code
+# - Case-sensitive names are correct
+# - All required variables are included
 # ===========================================
 

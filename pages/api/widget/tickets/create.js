@@ -43,6 +43,7 @@ export default async function handler(req, res) {
       uploadDir: path.join(process.cwd(), 'public', 'uploads', 'tickets'),
       keepExtensions: true,
       maxFileSize: 5 * 1024 * 1024, // 5MB per file
+      maxTotalFileSize: 5 * 1024 * 1024, // 5MB total for all files combined
       multiples: true,
     });
 
@@ -52,7 +53,29 @@ export default async function handler(req, res) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
-    const [fields, files] = await form.parse(req);
+    let fields, files;
+    try {
+      [fields, files] = await form.parse(req);
+    } catch (parseError) {
+      // Handle file size errors from formidable
+      if (parseError.message && (parseError.message.includes('exceeded') || parseError.message.includes('maxTotalFileSize'))) {
+        // Extract size information from error message
+        const sizeMatch = parseError.message.match(/(\d+)\s*(?:bytes|MB|KB)/i);
+        const receivedSize = sizeMatch ? parseInt(sizeMatch[1]) : null;
+        const receivedSizeMB = receivedSize ? (receivedSize / (1024 * 1024)).toFixed(2) : 'unknown';
+        
+        return res.status(413).json({
+          success: false,
+          error: 'Total file size exceeded',
+          message: `The total size of all files (${receivedSizeMB} MB) exceeds the limit of 5 MB. Please compress your images or remove some files.`,
+          receivedSizeMB: receivedSizeMB,
+          maxSizeMB: '5',
+          errorType: 'FILE_SIZE_EXCEEDED'
+        });
+      }
+      // Re-throw other parsing errors
+      throw parseError;
+    }
 
     // Extract form fields
     const subject = Array.isArray(fields.subject) ? fields.subject[0] : fields.subject;
