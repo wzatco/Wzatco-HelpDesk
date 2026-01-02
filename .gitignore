@@ -1,9 +1,14 @@
+# Dependencies and build outputs
 node_modules/
 .next/
+
+# Environment files (note: .env.production is intentionally tracked)
 .env.local
 .env
 .env.production.local
 .env.development.local
+
+# System files
 .DS_Store
 
 # amplify
