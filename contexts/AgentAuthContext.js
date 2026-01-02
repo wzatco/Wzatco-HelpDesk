@@ -82,6 +82,7 @@ export function AgentAuthProvider({ children }) {
       // ===== GLOBAL EVENT LISTENER 1: TICKET ASSIGNMENTS =====
       socket.on('ticket:assigned', async (data) => {
         console.log('🎫 AgentAuth: Ticket assigned event received (via personal room):', data);
+        console.log('🎫 AgentAuth: Socket connection status:', socket.connected ? 'connected' : 'disconnected');
         
         // Get current user from localStorage
         const currentUser = JSON.parse(localStorage.getItem('agentUser') || '{}');

@@ -823,7 +823,7 @@ export default function NewTicketPage() {
                       <StyledSelect
                         required={true}
                         value={formData.productId}
-                        onChange={(e) => setFormData(prev => ({ ...prev, productId: e.target.value, accessoryId: '' }))}
+                        onChange={(value) => setFormData(prev => ({ ...prev, productId: value, accessoryId: '' }))}
                         placeholder="Select Product"
                         options={[
                           { value: '', name: 'Select Product' },
@@ -838,7 +838,7 @@ export default function NewTicketPage() {
                       </label>
                       <StyledSelect
                         value={formData.accessoryId}
-                        onChange={(e) => setFormData(prev => ({ ...prev, accessoryId: e.target.value }))}
+                        onChange={(value) => setFormData(prev => ({ ...prev, accessoryId: value }))}
                         disabled={!formData.productId}
                         placeholder="Select Accessory (Optional)"
                         options={[
@@ -858,7 +858,7 @@ export default function NewTicketPage() {
                       <StyledSelect
                         required={true}
                         value={formData.category}
-                        onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                        onChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
                         placeholder="Select Category"
                         options={
                           issueCategories.length > 0
@@ -881,7 +881,7 @@ export default function NewTicketPage() {
                         </label>
                         <StyledSelect
                           value={formData.priority}
-                          onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
+                          onChange={(value) => setFormData(prev => ({ ...prev, priority: value }))}
                           placeholder="Select Priority"
                           options={[
                             { value: 'low', name: 'Low' },

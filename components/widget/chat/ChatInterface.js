@@ -980,23 +980,42 @@ const ChatInterface = forwardRef(function ChatInterface({ userInfo, onNewChat, c
         setChatHistory(history);
         localStorage.setItem('chat-widget-history', JSON.stringify(history));
       } else {
-        // Fallback to KB search if OpenAI fails
-        const kbResponse = await fetch(`/api/widget/knowledge-base/articles?search=${encodeURIComponent(text)}&limit=3`);
-        const kbData = await kbResponse.json();
-
+        // Check if message is a greeting (don't show KB articles for greetings)
+        const normalizedText = text.trim().toLowerCase().replace(/[^\w\s]/g, '');
+        const greetingPatterns = [
+          /^(hi|hey|hello|hey there|hi there|greetings|greeting)$/,
+          /^(good morning|good afternoon|good evening|good night|gm|gn)$/,
+          /^(thanks|thank you|thankyou|thx|ty|appreciate it|much appreciated)$/,
+          /^(ok|okay|okey|k|sure|alright|alrite|yep|yeah|yes|nope|no|nah)$/,
+          /^(cool|nice|good|great|awesome|sweet|perfect|fine|okay thanks|ok thanks)$/,
+          /^(how are you|how are you doing|how do you do|whats up|what's up|sup|wassup)$/,
+          /^[!?.]{0,3}$/,
+          /^(hi|hey|hello|thanks|thank you|ok|okay|yes|no|yeah|yep|nope|sure|alright|cool|nice|good|great|awesome)$/
+        ];
+        
+        const isGreeting = greetingPatterns.some(pattern => pattern.test(normalizedText)) || 
+                          normalizedText.length <= 3 ||
+                          (normalizedText.split(/\s+/).length <= 2 && /^(hi|hey|hello|thanks|ok|yes|no)/.test(normalizedText));
+        
+        // Fallback to KB search if OpenAI fails (but skip for greetings)
         let fallbackResponse = data.message || 'I understand you\'re asking about that. Let me help you.';
 
-        if (kbData.success && kbData.articles && kbData.articles.length > 0) {
-          const article = kbData.articles[0];
-          // Convert blocks to plain text if needed, otherwise strip HTML
-          let contentPreview;
-          if (isBlocksContent(article.content, article.contentType)) {
-            contentPreview = blocksToPlainText(article.content);
-          } else {
-            contentPreview = article.content.replace(/<[^>]*>/g, '');
+        if (!isGreeting) {
+          const kbResponse = await fetch(`/api/widget/knowledge-base/articles?search=${encodeURIComponent(text)}&limit=3`);
+          const kbData = await kbResponse.json();
+
+          if (kbData.success && kbData.articles && kbData.articles.length > 0) {
+            const article = kbData.articles[0];
+            // Convert blocks to plain text if needed, otherwise strip HTML
+            let contentPreview;
+            if (isBlocksContent(article.content, article.contentType)) {
+              contentPreview = blocksToPlainText(article.content);
+            } else {
+              contentPreview = article.content.replace(/<[^>]*>/g, '');
+            }
+            contentPreview = contentPreview.substring(0, 300);
+            fallbackResponse = `Based on our knowledge base:\n\n**${article.title}**\n\n${contentPreview}${contentPreview.length >= 300 ? '...' : ''}`;
           }
-          contentPreview = contentPreview.substring(0, 300);
-          fallbackResponse = `Based on our knowledge base:\n\n**${article.title}**\n\n${contentPreview}${contentPreview.length >= 300 ? '...' : ''}`;
         }
 
         const botMessage = {

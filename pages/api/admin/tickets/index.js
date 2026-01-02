@@ -1055,6 +1055,9 @@ async function handlePost(req, res) {
       });
     }
 
+    // Get ticket settings to check userMaxOpenTickets (needed in both branches)
+    const ticketSettings = await getTicketSettings();
+    
     // Check for existing open tickets if customer is provided
     let customer;
     if (customerId) {
@@ -1062,9 +1065,6 @@ async function handlePost(req, res) {
       if (!customer) {
         return res.status(404).json({ message: 'Customer not found' });
       }
-
-      // Get ticket settings to check userMaxOpenTickets
-      const ticketSettings = await getTicketSettings();
       
       // Check for existing open tickets
       const existingOpenTickets = await prisma.conversation.findMany({

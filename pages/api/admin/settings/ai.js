@@ -1,10 +1,8 @@
 import prisma from '@/lib/prisma';
-import { hashApiKey, getApiKeyPrefix, encryptApiKey, decryptApiKey } from '@/lib/crypto-utils';
+import { getApiKeyPrefix } from '@/lib/crypto-utils';
 
 const SETTINGS_KEYS = {
-  AI_API_KEYS: 'ai_api_keys',
-  AI_API_KEYS_HASHED: 'ai_api_keys_hashed', // Store hashed keys
-  AI_API_KEYS_ENCRYPTED: 'ai_api_keys_encrypted', // Store encrypted keys for retrieval
+  AI_API_KEYS: 'ai_api_keys', // Store OpenAI keys in plain text (no encryption)
   AI_ENABLED: 'ai_enabled'
 };
 
@@ -24,25 +22,17 @@ export default async function handler(req, res) {
         settingsObj[setting.key] = setting.value;
       });
 
-      // Parse encrypted API keys if stored
+      // Parse API keys (stored in plain text, no encryption)
       let apiKeys = {};
-      let apiKeysHashed = {};
       try {
-        // Get encrypted keys for display (masked)
-        if (settingsObj[SETTINGS_KEYS.AI_API_KEYS_ENCRYPTED]) {
-          const encryptedData = JSON.parse(settingsObj[SETTINGS_KEYS.AI_API_KEYS_ENCRYPTED]);
-          // Decrypt and show masked versions
-          Object.keys(encryptedData).forEach(key => {
-            const decrypted = decryptApiKey(encryptedData[key]);
-            if (decrypted) {
-              apiKeys[key] = getApiKeyPrefix(decrypted); // Show only prefix
+        if (settingsObj[SETTINGS_KEYS.AI_API_KEYS]) {
+          const keysData = JSON.parse(settingsObj[SETTINGS_KEYS.AI_API_KEYS]);
+          // Show masked versions for display
+          Object.keys(keysData).forEach(key => {
+            if (keysData[key]) {
+              apiKeys[key] = getApiKeyPrefix(keysData[key]); // Show only prefix
             }
           });
-        }
-        
-        // Get hashed keys for verification
-        if (settingsObj[SETTINGS_KEYS.AI_API_KEYS_HASHED]) {
-          apiKeysHashed = JSON.parse(settingsObj[SETTINGS_KEYS.AI_API_KEYS_HASHED]);
         }
       } catch (e) {
         console.error('Error parsing API keys:', e);
@@ -51,8 +41,7 @@ export default async function handler(req, res) {
       // Return with defaults if not set
       const result = {
         apiKeys: apiKeys || {}, // Masked keys for display
-        apiKeysHashed: apiKeysHashed || {}, // Hashed keys (for verification)
-        hasApiKeys: Object.keys(apiKeysHashed).length > 0, // Whether keys exist
+        hasApiKeys: Object.keys(apiKeys).length > 0, // Whether keys exist
         aiEnabled: settingsObj[SETTINGS_KEYS.AI_ENABLED] === 'true' || false
       };
 
@@ -65,10 +54,9 @@ export default async function handler(req, res) {
     try {
       const { apiKeys, aiEnabled } = req.body;
 
-      // Update or create API Keys with HMAC hashing
+      // Update or create API Keys (stored in plain text, no encryption)
       if (apiKeys !== undefined) {
-        const hashedKeys = {};
-        const encryptedKeys = {};
+        const plainKeys = {};
         
         // Process each API key
         Object.keys(apiKeys).forEach(key => {
@@ -77,43 +65,24 @@ export default async function handler(req, res) {
             // Only update if it's a new key (not a masked prefix)
             // If it starts with the prefix pattern, it's likely already stored
             if (!apiKey.includes('••••••••') && apiKey.length > 10) {
-              // Hash for verification
-              hashedKeys[key] = hashApiKey(apiKey);
-              // Encrypt for storage (so we can decrypt when needed)
-              encryptedKeys[key] = encryptApiKey(apiKey);
+              // Store in plain text (no encryption)
+              plainKeys[key] = apiKey.trim();
             }
           }
         });
 
-        // Store hashed keys (for verification)
-        if (Object.keys(hashedKeys).length > 0) {
+        // Store plain text keys
+        if (Object.keys(plainKeys).length > 0) {
           await prisma.settings.upsert({
-            where: { key: SETTINGS_KEYS.AI_API_KEYS_HASHED },
+            where: { key: SETTINGS_KEYS.AI_API_KEYS },
             update: { 
-              value: JSON.stringify(hashedKeys),
+              value: JSON.stringify(plainKeys),
               updatedAt: new Date()
             },
             create: {
-              key: SETTINGS_KEYS.AI_API_KEYS_HASHED,
-              value: JSON.stringify(hashedKeys),
-              description: 'AI API keys (HMAC hashed for verification)',
-              category: 'ai'
-            }
-          });
-        }
-
-        // Store encrypted keys (for retrieval when needed)
-        if (Object.keys(encryptedKeys).length > 0) {
-          await prisma.settings.upsert({
-            where: { key: SETTINGS_KEYS.AI_API_KEYS_ENCRYPTED },
-            update: { 
-              value: JSON.stringify(encryptedKeys),
-              updatedAt: new Date()
-            },
-            create: {
-              key: SETTINGS_KEYS.AI_API_KEYS_ENCRYPTED,
-              value: JSON.stringify(encryptedKeys),
-              description: 'AI API keys (encrypted for secure storage)',
+              key: SETTINGS_KEYS.AI_API_KEYS,
+              value: JSON.stringify(plainKeys),
+              description: 'AI API keys (stored in plain text)',
               category: 'ai'
             }
           });

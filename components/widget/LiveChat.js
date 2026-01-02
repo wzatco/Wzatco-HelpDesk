@@ -53,21 +53,47 @@ export default function LiveChat({ userInfo, onBack, onChatEnd }) {
 
     const newSocket = io(socketUrl, {
       path: '/api/widget/socket',
-      transports: ['polling', 'websocket'],
+      transports: ['polling', 'websocket'], // Polling first for better proxy compatibility
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+      forceNew: false,
+      upgrade: true, // Allow upgrade from polling to websocket if available
+      rememberUpgrade: false, // Don't remember failed websocket upgrades
       auth: {
         token: token // Sending null is safe; the server handles it
       }
     });
 
     newSocket.on('connect', () => {
-      console.log('✅ Widget: Socket.io connected!', newSocket.id);
+      console.log('✅ Widget: Socket.io connected!', newSocket.id, 'Transport:', newSocket.io.engine.transport.name);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('❌ Widget: Socket.io disconnected');
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ Widget: Socket.io disconnected', reason);
+      
+      // Only reconnect if it wasn't a manual disconnect
+      if (reason === 'io server disconnect') {
+        newSocket.connect();
+      }
+    });
+
+    newSocket.on('connect_error', (error) => {
+      // Only log once per connection attempt to reduce spam
+      if (!newSocket.connected) {
+        console.warn('⚠️ Widget: Socket.io connection error (will retry):', error.message || error);
+      }
+    });
+
+    // Handle transport upgrade/downgrade
+    newSocket.io.on('upgrade', () => {
+      console.log('✅ Widget: Socket.io upgraded to:', newSocket.io.engine.transport.name);
+    });
+
+    newSocket.io.on('upgradeError', (error) => {
+      console.warn('⚠️ Widget: Socket.io upgrade failed, staying on polling:', error.message || error);
     });
 
     newSocket.on('chat_joined', (data) => {

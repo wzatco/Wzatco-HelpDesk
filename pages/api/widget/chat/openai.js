@@ -1,10 +1,9 @@
 // Widget API - OpenAI Chat Completion (Server-side only)
 import prisma from '@/lib/prisma';
-import { decryptApiKey } from '@/lib/crypto-utils';
 import { blocksToPlainText, isBlocksContent } from '@/utils/blockRenderer';
 
 const SETTINGS_KEYS = {
-  AI_API_KEYS_ENCRYPTED: 'ai_api_keys_encrypted',
+  AI_API_KEYS: 'ai_api_keys', // OpenAI keys stored in plain text (no encryption)
   AI_ENABLED: 'ai_enabled'
 };
 
@@ -23,20 +22,46 @@ async function getOpenAIApiKey() {
 
     // Check if AI is enabled
     if (settingsObj[SETTINGS_KEYS.AI_ENABLED] !== 'true') {
+      console.log('⚠️ OpenAI: AI is not enabled');
       return null;
     }
 
-    // Get encrypted OpenAI key
-    if (settingsObj[SETTINGS_KEYS.AI_API_KEYS_ENCRYPTED]) {
-      const encryptedData = JSON.parse(settingsObj[SETTINGS_KEYS.AI_API_KEYS_ENCRYPTED]);
-      if (encryptedData.openai) {
-        return decryptApiKey(encryptedData.openai);
+    // Get OpenAI key (stored in plain text, no decryption needed)
+    if (settingsObj[SETTINGS_KEYS.AI_API_KEYS]) {
+      try {
+        const keysData = JSON.parse(settingsObj[SETTINGS_KEYS.AI_API_KEYS]);
+        if (keysData.openai) {
+          const apiKey = keysData.openai.trim();
+          
+          // Validate key
+          if (!apiKey || apiKey.length < 20) {
+            console.error(`❌ OpenAI: API key is too short (${apiKey.length} chars)`);
+            return null;
+          }
+          
+          if (!apiKey.startsWith('sk-')) {
+            console.error(`❌ OpenAI: API key does not start with 'sk-': ${apiKey.substring(0, 20)}...`);
+            return null;
+          }
+          
+          console.log(`✅ OpenAI: Successfully retrieved API key (length: ${apiKey.length}, prefix: ${apiKey.substring(0, 12)}...)`);
+          return apiKey;
+        } else {
+          console.log('⚠️ OpenAI: No OpenAI key found in API keys data');
+        }
+      } catch (parseError) {
+        console.error('❌ OpenAI: Error parsing API keys JSON:', parseError);
+        console.error('❌ OpenAI: Raw value length:', settingsObj[SETTINGS_KEYS.AI_API_KEYS]?.length);
+        return null;
       }
+    } else {
+      console.log('⚠️ OpenAI: No API keys found in settings');
     }
 
     return null;
   } catch (error) {
-    console.error('Error getting OpenAI API key:', error);
+    console.error('❌ OpenAI: Error getting API key:', error);
+    console.error('❌ OpenAI: Error stack:', error.stack);
     return null;
   }
 }
@@ -599,9 +624,32 @@ Examples:
     let kbContext = '';
     let kbArticles = [];
     try {
-      // Check if message is just a greeting/short message (don't show articles for these)
-      const greetingPatterns = /^(hi|hey|hello|hey there|hi there|greetings|good morning|good afternoon|good evening|thanks|thank you|ok|okay|yes|no|yeah|yep|nope|sure|alright|cool|nice|good|great|awesome|thanks!|thank you!)$/i;
-      const isGreeting = greetingPatterns.test(message.trim());
+      // Enhanced greeting detection - comprehensive list of greetings and generic responses
+      const normalizedMessage = message.trim().toLowerCase().replace(/[^\w\s]/g, '');
+      const greetingPatterns = [
+        // Basic greetings
+        /^(hi|hey|hello|hey there|hi there|greetings|greeting)$/,
+        // Time-based greetings
+        /^(good morning|good afternoon|good evening|good night|gm|gn)$/,
+        // Thanks/acknowledgments
+        /^(thanks|thank you|thankyou|thx|ty|appreciate it|much appreciated)$/,
+        // Simple responses
+        /^(ok|okay|okey|k|sure|alright|alrite|yep|yeah|yes|nope|no|nah)$/,
+        // Positive responses
+        /^(cool|nice|good|great|awesome|sweet|perfect|fine|okay thanks|ok thanks)$/,
+        // Questions that are just greetings
+        /^(how are you|how are you doing|how do you do|whats up|what's up|sup|wassup)$/,
+        // Just punctuation or very short
+        /^[!?.]{0,3}$/,
+        // Very short messages (1-2 words that are common greetings)
+        /^(hi|hey|hello|thanks|thank you|ok|okay|yes|no|yeah|yep|nope|sure|alright|cool|nice|good|great|awesome)$/
+      ];
+      
+      const isGreeting = greetingPatterns.some(pattern => pattern.test(normalizedMessage)) || 
+                        normalizedMessage.length <= 3 || // Very short messages
+                        (normalizedMessage.split(/\s+/).length <= 2 && /^(hi|hey|hello|thanks|ok|yes|no)/.test(normalizedMessage));
+      
+      console.log(`[KB Search] Message: "${message}" | Is Greeting: ${isGreeting} | Normalized: "${normalizedMessage}"`);
       
       // Only search for articles if it's not just a greeting
       if (!isGreeting) {
@@ -643,10 +691,24 @@ Examples:
 
 Customer Query: "${message}"
 
+CRITICAL RULES:
+1. DO NOT select articles for greetings, simple acknowledgments, or generic responses like:
+   - "Hello", "Hi", "Hey", "Thanks", "Thank you", "OK", "Okay", "Yes", "No", "Sure", "Alright", "Cool", "Nice", "Good", "Great", "Awesome"
+   - "How are you?", "What's up?", "Good morning", "Good afternoon", "Good evening"
+   - Any message that is just a greeting or acknowledgment without a specific question or problem
+   
+2. ONLY select articles when the customer has:
+   - A specific question or problem
+   - A request for help or information
+   - A technical issue or inquiry
+   - A need for detailed information
+
+3. If the query is just a greeting or generic response, return: { "selectedArticleIds": [] }
+
 Available Knowledge Base Articles:
 ${articlesList}
 
-Based on the customer's query, select the most relevant articles (maximum 3-5 articles). Consider:
+Based on the customer's query, select the most relevant articles (maximum 3-5 articles) ONLY if they have a specific question or problem. Consider:
 - Direct relevance to the question
 - Similar topics or related issues
 - Articles that could help solve the problem
@@ -656,7 +718,7 @@ Respond with ONLY a valid JSON object with this exact structure:
   "selectedArticleIds": ["article_id_1", "article_id_2", "article_id_3"]
 }
 
-If no articles are relevant, return: { "selectedArticleIds": [] }`;
+If no articles are relevant OR if this is just a greeting/acknowledgment, return: { "selectedArticleIds": [] }`;
 
           try {
             const selectionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -670,7 +732,7 @@ If no articles are relevant, return: { "selectedArticleIds": [] }`;
                 messages: [
                   {
                     role: 'system',
-                    content: 'You are a helpful assistant that selects relevant Knowledge Base articles. Always respond with valid JSON only, using the exact format specified.'
+                    content: 'You are a helpful assistant that selects relevant Knowledge Base articles. CRITICAL: Do NOT select articles for greetings, simple acknowledgments, or generic responses like "Hello", "Hi", "Thanks", "OK", etc. Only select articles when the customer has a specific question or problem. Always respond with valid JSON only, using the exact format specified.'
                   },
                   {
                     role: 'user',

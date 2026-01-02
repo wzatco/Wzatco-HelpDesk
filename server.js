@@ -59,19 +59,36 @@ async function startServer() {
     });
 
     // Initialize Socket.IO BEFORE attaching to server
+    // Build CORS origin list for production
+    const productionOrigins = [];
+    if (process.env.CLIENT_URL) {
+      productionOrigins.push(process.env.CLIENT_URL);
+    }
+    if (process.env.NEXT_PUBLIC_BASE_URL) {
+      productionOrigins.push(process.env.NEXT_PUBLIC_BASE_URL);
+    }
+    // If no explicit origins set, allow all (for development/testing)
+    const corsOrigin = dev
+      ? ['http://localhost:3000', 'http://localhost:8000', 'http://localhost:8001']
+      : (productionOrigins.length > 0 ? productionOrigins : true); // Allow all if no explicit origin set
+    
+    console.log(`🌐 Socket.IO CORS configured for: ${JSON.stringify(corsOrigin)}`);
+    
     const io = new Server(httpServer, {
       path: '/api/widget/socket',
       cors: {
-        origin: dev
-          ? ['http://localhost:3000', 'http://localhost:8000', 'http://localhost:8001']
-          : process.env.CLIENT_URL,
+        origin: corsOrigin,
         credentials: true,
         methods: ['GET', 'POST', 'OPTIONS'],
       },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Polling first for better reverse proxy compatibility
       allowEIO3: true,
       pingTimeout: 60000,
       pingInterval: 25000,
+      // Better handling for reverse proxies (like Hostinger)
+      allowUpgrades: true,
+      perMessageDeflate: false, // Disable compression for better proxy compatibility
+      httpCompression: false, // Disable HTTP compression for better proxy compatibility
     });
 
     // Initialize chat service

@@ -1,10 +1,9 @@
 // API Route to detect current Indian festival using OpenAI
 import prisma from '@/lib/prisma';
 import OpenAI from 'openai';
-import { decryptApiKey } from '@/lib/crypto-utils';
 
 const SETTINGS_KEYS = {
-  AI_API_KEYS_ENCRYPTED: 'ai_api_keys_encrypted',
+  AI_API_KEYS: 'ai_api_keys', // OpenAI keys stored in plain text (no encryption)
   AI_ENABLED: 'ai_enabled'
 };
 
@@ -26,11 +25,11 @@ async function getOpenAIApiKey() {
       return null;
     }
 
-    // Get encrypted OpenAI key
-    if (settingsObj[SETTINGS_KEYS.AI_API_KEYS_ENCRYPTED]) {
-      const encryptedData = JSON.parse(settingsObj[SETTINGS_KEYS.AI_API_KEYS_ENCRYPTED]);
-      if (encryptedData.openai) {
-        return decryptApiKey(encryptedData.openai);
+    // Get OpenAI key (stored in plain text, no decryption needed)
+    if (settingsObj[SETTINGS_KEYS.AI_API_KEYS]) {
+      const keysData = JSON.parse(settingsObj[SETTINGS_KEYS.AI_API_KEYS]);
+      if (keysData.openai) {
+        return keysData.openai.trim();
       }
     }
 

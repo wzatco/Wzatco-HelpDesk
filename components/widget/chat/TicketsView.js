@@ -53,29 +53,51 @@ export default function TicketsView({ userInfo, onBack }) {
 
     const socket = io({
       path: '/api/widget/socket',
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Polling first for better proxy compatibility
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
+      timeout: 20000,
+      forceNew: false,
+      upgrade: true, // Allow upgrade from polling to websocket if available
+      rememberUpgrade: false, // Don't remember failed websocket upgrades
       auth: {
         token: token // Sending null is safe; the server handles it
       }
     });
 
     socket.on('connect', () => {
-      console.log('✅ Widget: Socket.IO connected', socket.id);
+      console.log('✅ Widget: Socket.IO connected', socket.id, 'Transport:', socket.io.engine.transport.name);
       setSocketConnected(true);
     });
 
-    socket.on('disconnect', () => {
-      console.log('❌ Widget: Socket.IO disconnected');
+    socket.on('disconnect', (reason) => {
+      console.log('❌ Widget: Socket.IO disconnected', reason);
       setSocketConnected(false);
+      
+      // Only reconnect if it wasn't a manual disconnect
+      if (reason === 'io server disconnect') {
+        // Server disconnected, reconnect manually
+        socket.connect();
+      }
     });
 
     socket.on('connect_error', (error) => {
-      console.error('❌ Widget: Socket.IO connection error:', error);
-      setSocketConnected(false);
+      // Only log once per connection attempt to reduce spam
+      if (!socket.connected) {
+        console.warn('⚠️ Widget: Socket.IO connection error (will retry):', error.message || error);
+        setSocketConnected(false);
+      }
+    });
+
+    // Handle transport upgrade/downgrade
+    socket.io.on('upgrade', () => {
+      console.log('✅ Widget: Socket.IO upgraded to:', socket.io.engine.transport.name);
+    });
+
+    socket.io.on('upgradeError', (error) => {
+      console.warn('⚠️ Widget: Socket.IO upgrade failed, staying on polling:', error.message || error);
     });
 
     socketRef.current = socket;
