@@ -1,6 +1,7 @@
 # Hostinger Next.js + Socket.IO Configuration
-# For: lightblue-lion-382226.hostingersite.com
+# For: orangered-alpaca-614506.hostingersite.com
 
+PassengerAppRoot /home/u394742293/domains/orangered-alpaca-614506.hostingersite.com/public_html
 PassengerAppType node
 PassengerNodejs /opt/alt/alt-nodejs20/root/bin/node
 PassengerStartupFile server.js
@@ -23,3 +24,9 @@ PassengerAppEnv production
   RewriteRule ^ - [L]
 </IfModule>
 
+# Allow access to .next directory
+<Directory "/home/u394742293/domains/orangered-alpaca-614506.hostingersite.com/public_html/.next">
+  Options -Indexes +FollowSymLinks
+  AllowOverride None
+  Require all granted
+</Directory>
