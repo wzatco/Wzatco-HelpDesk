@@ -1,0 +1,7 @@
+PassengerAppRoot /home/u394742293/domains/blue-albatross-554679.hostingersite.com/public_html
+PassengerAppType node
+PassengerNodejs /opt/alt/alt-nodejs20/root/bin/node
+PassengerStartupFile server.js
+PassengerBaseURI /
+PassengerAppEnv production
+
