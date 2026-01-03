@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --max-old-space-size=4096 server.js",
     "dev:next": "node --max-old-space-size=4096 node_modules/.bin/next dev -p 3000",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build && npm run postbuild",
+    "postbuild": "node -e \"const fs=require('fs'); if(fs.existsSync('.next/standalone/server.js')){fs.copyFileSync('server.js','.next/standalone/server.js.backup'); console.log('✅ Backed up Next.js standalone server'); fs.copyFileSync('server.js','server.js.custom'); console.log('✅ Preserved custom server.js');}\"",
     "start": "node server.js",
     "start:next": "next start -p 3000",
     "postinstall": "prisma generate",
