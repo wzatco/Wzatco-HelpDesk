@@ -2,10 +2,6 @@
   "name": "adminnagent",
   "version": "0.1.0",
   "private": true,
-  "engines": {
-    "node": ">=22.x",
-    "npm": ">=10.x"
-  },
   "scripts": {
     "dev": "node --max-old-space-size=4096 server.js",
     "dev:next": "node --max-old-space-size=4096 node_modules/.bin/next dev -p 3000",
