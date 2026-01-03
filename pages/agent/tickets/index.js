@@ -9,6 +9,7 @@ import { agentTicketColumns } from '../../../components/agent/tickets/AgentTicke
 import { AgentTicketDataTable } from '../../../components/agent/tickets/AgentTicketDataTable';
 import { AgentTicketTableToolbar } from '../../../components/agent/tickets/AgentTicketTableToolbar';
 import { BulkActionsToolbar } from '../../../components/agent/tickets/BulkActionsToolbar';
+import BulkActionsWidget from '../../../components/shared/BulkActionsWidget';
 import { SavedFiltersToolbar } from '../../../components/agent/tickets/SavedFiltersToolbar';
 import { 
   Ticket as TicketIcon,
@@ -406,6 +407,18 @@ export default function AgentTicketsPage() {
           </Card>
         </div>
       </div>
+
+      {/* Bulk Actions Widget */}
+      <BulkActionsWidget
+        selectedTicketIds={selectedTickets}
+        onClearSelection={() => setSelectedTickets([])}
+        onBulkAction={handleBulkAction}
+        userRole="agent"
+        onRefresh={fetchTickets}
+        availableTags={[]} // TODO: Fetch tags if needed
+        availableAgents={[]} // TODO: Fetch agents if needed
+        availableAdmins={[]}
+      />
     </AgentLayout>
   );
 }

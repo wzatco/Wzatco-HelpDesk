@@ -635,13 +635,19 @@ async function handleGet(req, res) {
       priority, 
       assignee, 
       dateRange, 
+      startDate, // Custom date range start
+      endDate, // Custom date range end
       search,
       searchType, // 'all', 'mobile', 'email', 'name', 'ticketId', 'product'
       productModel,
       tags,
       agentId,
+      adminId, // Admin assignee filter
       needReply,
-      showAll = 'false' // NEW: Parameter to show/hide resolved/closed tickets
+      showAll = 'false', // NEW: Parameter to show/hide resolved/closed tickets
+      export: exportFormat, // 'csv' or 'excel'
+      ticketIds, // For bulk export
+      customerId // Direct customer ID filter
     } = req.query;
     
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -649,87 +655,164 @@ async function handleGet(req, res) {
     // Build where clause
     const where = {};
     
-    // Status filter
-    if (status && status !== 'all') {
-      where.status = status;
+    // Handle ticketIds filter for bulk export
+    // When ticketIds is provided, only use that filter (ignore other filters for export)
+    if (ticketIds) {
+      const idsArray = Array.isArray(ticketIds) ? ticketIds : ticketIds.split(',');
+      where.ticketNumber = { in: idsArray };
     } else {
-      // NEW: Hide resolved/closed tickets by default unless showAll=true
-      const hideResolvedClosed = showAll !== 'true';
-      if (hideResolvedClosed) {
-        where.status = { notIn: ['resolved', 'closed'] };
+      // Only apply other filters if ticketIds is not provided
+      // Status filter
+      if (status && status !== 'all') {
+        where.status = status;
+      } else {
+        // For exports, show all tickets when status is 'all'
+        // For regular list view, hide resolved/closed tickets by default unless showAll=true
+        if (exportFormat) {
+          // Export mode: show all tickets when status is 'all'
+          // Don't apply any status filter
+        } else {
+          // List view mode: Hide resolved/closed tickets by default unless showAll=true
+          const hideResolvedClosed = showAll !== 'true';
+          if (hideResolvedClosed) {
+            where.status = { notIn: ['resolved', 'closed'] };
+          }
+        }
       }
     }
     
-    // Priority filter
-    if (priority && priority !== 'all') {
-      where.priority = priority;
-    }
+    // Only apply other filters if ticketIds is not provided
+    if (!ticketIds) {
+      // Priority filter
+      if (priority && priority !== 'all') {
+        where.priority = priority;
+      }
 
-    // Assignee filter - enhanced to support agentId
-    if (agentId && agentId !== 'all') {
-      if (agentId === 'unassigned') {
-        where.assigneeId = null;
-      } else {
-        where.assigneeId = agentId;
+      // Assignee filter - enhanced to support agentId and adminId
+      if (adminId && adminId !== 'all') {
+        // Filter by admin assignment
+        if (adminId === 'unassigned') {
+          where.assigneeId = null;
+        } else {
+          // Find admin by ID and use their userId as assigneeId
+          const admin = await prisma.admin.findUnique({
+            where: { id: adminId },
+            select: { userId: true }
+          }).catch(() => null);
+          
+          if (admin && admin.userId) {
+            where.assigneeId = admin.userId;
+          } else {
+            // If not found, try using adminId directly (in case it's a userId)
+            where.assigneeId = adminId;
+          }
+        }
+      } else if (agentId && agentId !== 'all') {
+        if (agentId === 'unassigned') {
+          where.assigneeId = null;
+        } else {
+          where.assigneeId = agentId;
+        }
+      } else if (assignee && assignee !== 'all') {
+        if (assignee === 'unassigned') {
+          where.assigneeId = null;
+        } else {
+          // First try to find by ID (in case assignee is an agent ID)
+          let agent = await prisma.agent.findUnique({
+            where: { id: assignee }
+          }).catch(() => null);
+          
+          // If not found by ID, try to find by name
+          if (!agent) {
+            agent = await prisma.agent.findFirst({
+              where: { name: { contains: assignee } }
+            });
+          }
+          
+          if (agent) {
+            where.assigneeId = agent.id;
+          }
+        }
       }
-    } else if (assignee && assignee !== 'all') {
-      if (assignee === 'unassigned') {
-        where.assigneeId = null;
-      } else {
-        // First try to find by ID (in case assignee is an agent ID)
-        let agent = await prisma.agent.findUnique({
-          where: { id: assignee }
-        }).catch(() => null);
-        
-        // If not found by ID, try to find by name
-        if (!agent) {
-          agent = await prisma.agent.findFirst({
-            where: { name: { contains: assignee } }
-          });
-        }
-        
-        if (agent) {
-          where.assigneeId = agent.id;
-        }
+    
+      // Customer ID filter (direct filter by customer ID)
+      if (customerId) {
+        where.customerId = customerId;
       }
-    }
     
-    // Product/Model filter
-    if (productModel && productModel !== 'all') {
-      where.productModel = { contains: productModel };
-    }
-    
-    // Tags filter
-    if (tags && tags !== 'all') {
-      const tagIds = Array.isArray(tags) ? tags : tags.split(',');
-      where.tags = {
-        some: {
-          tagId: { in: tagIds }
-        }
-      };
-    }
-    
-    // Date range filter
-    if (dateRange && dateRange !== 'all') {
-      const now = new Date();
-      let startDate;
-      
-      switch (dateRange) {
-        case 'today':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          break;
-        case 'week':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case 'month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        default:
-          startDate = null;
+      // Product/Model filter
+      if (productModel && productModel !== 'all') {
+        where.productModel = { contains: productModel };
       }
       
-      if (startDate) {
-        where.createdAt = { gte: startDate };
+      // Tags filter
+      if (tags && tags !== 'all') {
+        const tagIds = Array.isArray(tags) ? tags : tags.split(',');
+        where.tags = {
+          some: {
+            tagId: { in: tagIds }
+          }
+        };
+      }
+      
+      // Date range filter
+      if (dateRange && dateRange !== 'all') {
+        const now = new Date();
+        let dateStart;
+        let dateEnd;
+        
+        switch (dateRange) {
+          case 'today':
+            dateStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            dateEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            break;
+          case 'week':
+            dateStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            dateEnd = new Date(now.getTime());
+            break;
+          case 'month':
+            dateStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            dateEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            break;
+          case 'custom':
+            // Use provided startDate and endDate
+            if (startDate) {
+              dateStart = new Date(startDate);
+              dateStart.setHours(0, 0, 0, 0);
+            }
+            if (endDate) {
+              dateEnd = new Date(endDate);
+              dateEnd.setHours(23, 59, 59, 999);
+            }
+            break;
+          default:
+            dateStart = null;
+            dateEnd = null;
+        }
+        
+        if (dateStart && dateEnd) {
+          where.createdAt = { gte: dateStart, lte: dateEnd };
+        } else if (dateStart) {
+          where.createdAt = { gte: dateStart };
+        } else if (dateEnd) {
+          where.createdAt = { lte: dateEnd };
+        }
+      } else if (startDate || endDate) {
+        // Handle custom date range even when dateRange is 'all' or not provided
+        const dateConditions = {};
+        if (startDate) {
+          const dateStart = new Date(startDate);
+          dateStart.setHours(0, 0, 0, 0);
+          dateConditions.gte = dateStart;
+        }
+        if (endDate) {
+          const dateEnd = new Date(endDate);
+          dateEnd.setHours(23, 59, 59, 999);
+          dateConditions.lte = dateEnd;
+        }
+        if (Object.keys(dateConditions).length > 0) {
+          where.createdAt = dateConditions;
+        }
       }
     }
     
@@ -846,11 +929,16 @@ async function handleGet(req, res) {
       }
     };
 
+    // For exports, fetch all matching tickets without pagination
+    const shouldSkipPagination = exportFormat || needReply === 'true';
+    const fetchLimit = shouldSkipPagination ? 100000 : parseInt(limit); // Large limit for exports
+    const fetchSkip = shouldSkipPagination ? 0 : skip;
+
     const [tickets, totalCount] = await Promise.all([
       prisma.conversation.findMany({
         where,
-        skip: needReply === 'true' ? 0 : skip, // Skip pagination if filtering, we'll paginate after
-        take: needReply === 'true' ? 10000 : parseInt(limit), // Fetch all if filtering, then filter and paginate
+        skip: fetchSkip,
+        take: fetchLimit,
         orderBy: { updatedAt: 'desc' },
         include: {
           ...includeMessages,
@@ -991,6 +1079,104 @@ async function handleGet(req, res) {
     }));
 
     const totalPages = Math.ceil(finalTotalCount / parseInt(limit));
+
+    // Handle export requests
+    if (exportFormat === 'csv' || exportFormat === 'excel') {
+      // If ticketIds is provided, fetch ALL matching tickets without any filters
+      let ticketsToExport = transformedTickets;
+      if (ticketIds) {
+        const idsArray = Array.isArray(ticketIds) ? ticketIds : ticketIds.split(',');
+        // Re-fetch tickets with ONLY ticketIds filter - ignore ALL other filters (status, priority, etc.)
+        // This ensures ALL selected tickets are exported regardless of their status or priority
+        const exportTickets = await prisma.conversation.findMany({
+          where: {
+            ticketNumber: { in: idsArray }
+            // NO other filters - get ALL tickets regardless of status, priority, etc.
+          },
+          include: {
+            assignee: true,
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true
+              }
+            },
+            department: {
+              select: {
+                id: true,
+                name: true
+              }
+            },
+            tags: {
+              include: {
+                Tag: true
+              }
+            },
+            _count: { select: { messages: true } }
+          },
+          orderBy: { updatedAt: 'desc' }
+        });
+
+        // Transform for export
+        ticketsToExport = await Promise.all(exportTickets.map(async (ticket) => {
+          return {
+            ticketNumber: ticket.ticketNumber,
+            subject: ticket.subject || 'No subject',
+            status: ticket.status,
+            priority: ticket.priority || 'low',
+            productModel: ticket.productModel || null,
+            customerName: ticket.customerName || ticket.customer?.name || null,
+            customer: ticket.customer,
+            assignee: ticket.assignee ? {
+              id: ticket.assignee.id,
+              name: ticket.assignee.name,
+              email: ticket.assignee.email
+            } : null,
+            category: ticket.category || '',
+            createdAt: ticket.createdAt,
+            updatedAt: ticket.updatedAt,
+            messageCount: ticket._count?.messages ?? 0
+          };
+        }));
+      }
+
+      // Generate CSV
+      const headers = ['Ticket Number', 'Subject', 'Status', 'Priority', 'Customer Name', 'Customer Email', 'Customer Phone', 'Assignee', 'Product Model', 'Category', 'Created At', 'Updated At', 'Message Count'];
+      const rows = ticketsToExport.map(ticket => [
+        ticket.ticketNumber || '',
+        ticket.subject || '',
+        ticket.status || '',
+        ticket.priority || '',
+        ticket.customerName || '',
+        ticket.customer?.email || '',
+        ticket.customer?.phone || '',
+        ticket.assignee?.name || 'Unassigned',
+        ticket.productModel || '',
+        ticket.category || '',
+        new Date(ticket.createdAt).toLocaleString(),
+        new Date(ticket.updatedAt).toLocaleString(),
+        ticket.messageCount || 0
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => {
+          const str = String(cell);
+          // Escape commas, quotes, and newlines
+          if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        }).join(','))
+      ].join('\n');
+
+      // Set headers for CSV download
+      res.setHeader('Content-Type', 'text/csv;charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="tickets-${new Date().toISOString().split('T')[0]}.csv"`);
+      return res.status(200).send(csvContent);
+    }
 
     res.status(200).json({
       tickets: transformedTickets,

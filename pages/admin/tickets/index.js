@@ -14,6 +14,8 @@ import { TicketDataTable } from '../../../components/admin/tickets/TicketDataTab
 import { TicketToolbar } from '../../../components/admin/tickets/TicketToolbar';
 import { createColumns } from '../../../components/admin/tickets/TicketTableColumns';
 import { AssignTicketModal } from '../../../components/admin/tickets/AssignTicketModal';
+import BulkActionsWidget from '../../../components/shared/BulkActionsWidget';
+import ExportTicketsModal from '../../../components/shared/ExportTicketsModal';
 
 export default function TicketsPage() {
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function TicketsPage() {
   // Modal state
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [ticketToAssign, setTicketToAssign] = useState(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   
   // Filter state
   const [filters, setFilters] = useState({
@@ -97,8 +100,18 @@ export default function TicketsPage() {
     const fetchAgents = async () => {
       try {
         const res = await fetch('/api/admin/agents');
+        if (!res.ok) {
+          console.error('Failed to fetch agents:', res.status, res.statusText);
+          return;
+        }
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.error('Non-JSON response from agents API:', text.substring(0, 200));
+          return;
+        }
         const data = await res.json();
-        if (res.ok) setAgents(data.agents || []);
+        setAgents(data.agents || []);
       } catch (error) {
         console.error('Error fetching agents:', error);
       }
@@ -107,8 +120,18 @@ export default function TicketsPage() {
     const fetchDepartments = async () => {
       try {
         const res = await fetch('/api/admin/departments');
+        if (!res.ok) {
+          console.error('Failed to fetch departments:', res.status, res.statusText);
+          return;
+        }
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.error('Non-JSON response from departments API:', text.substring(0, 200));
+          return;
+        }
         const data = await res.json();
-        if (res.ok) setDepartments(data.departments || []);
+        setDepartments(data.departments || []);
       } catch (error) {
         console.error('Error fetching departments:', error);
       }
@@ -192,29 +215,82 @@ export default function TicketsPage() {
     setCurrentPage(1);
   };
 
-  const handleExport = async () => {
+  const handleExport = () => {
+    // Open export modal instead of direct export
+    setExportModalOpen(true);
+  };
+
+  const handleExportWithFilters = async (exportFilters) => {
     try {
+      // Build query parameters from export filters
       const params = new URLSearchParams();
-      if (filters.status !== 'all') params.append('status', filters.status);
-      if (filters.priority !== 'all') params.append('priority', filters.priority);
-      if (filters.assignee !== 'all') params.append('assignee', filters.assignee);
-      if (filters.productModel !== 'all') params.append('productModel', filters.productModel);
-      if (filters.tags?.length > 0) params.append('tags', filters.tags.join(','));
-      if (debouncedSearchQuery.trim()) params.append('search', debouncedSearchQuery.trim());
-      params.append('export', 'csv');
+      
+      // Add filters from export modal
+      if (exportFilters.dateRange && exportFilters.dateRange !== 'all') {
+        if (exportFilters.dateRange === 'custom') {
+          params.append('dateRange', 'custom'); // Explicitly set dateRange to 'custom'
+          if (exportFilters.startDate) params.append('startDate', exportFilters.startDate);
+          if (exportFilters.endDate) params.append('endDate', exportFilters.endDate);
+        } else {
+          params.append('dateRange', exportFilters.dateRange);
+        }
+      } else if (exportFilters.startDate || exportFilters.endDate) {
+        // If custom dates are provided but dateRange is 'all', still add the dates
+        if (exportFilters.startDate) params.append('startDate', exportFilters.startDate);
+        if (exportFilters.endDate) params.append('endDate', exportFilters.endDate);
+      }
+      
+      if (exportFilters.status && exportFilters.status !== 'all') {
+        params.append('status', exportFilters.status);
+      }
+      
+      if (exportFilters.priority && exportFilters.priority !== 'all') {
+        params.append('priority', exportFilters.priority);
+      }
+      
+      if (exportFilters.assignee && exportFilters.assignee !== 'all') {
+        if (exportFilters.assigneeType === 'admin') {
+          params.append('adminId', exportFilters.assignee);
+        } else {
+          params.append('assignee', exportFilters.assignee);
+        }
+      }
+      
+      if (exportFilters.customerId) {
+        params.append('customerId', exportFilters.customerId);
+      } else if (exportFilters.customer && exportFilters.customer.trim()) {
+        params.append('search', exportFilters.customer.trim());
+        params.append('searchType', 'all');
+      }
+      
+      if (exportFilters.productModel && exportFilters.productModel.trim()) {
+        params.append('productModel', exportFilters.productModel.trim());
+      }
+      
+      // Add export format
+      params.append('export', exportFilters.exportFormat || 'csv');
       
       const response = await fetch(`/api/admin/tickets?${params}`);
+      
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `tickets-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `tickets-export-${new Date().toISOString().split('T')[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      
+      setExportModalOpen(false);
     } catch (error) {
       console.error('Error exporting tickets:', error);
+      alert('Failed to export tickets');
+      throw error;
     }
   };
 
@@ -233,6 +309,55 @@ export default function TicketsPage() {
     setAssignModalOpen(false);
     setTicketToAssign(null);
   };
+
+  // Bulk actions handler
+  const handleBulkAction = async (action, data) => {
+    if (selectedTicketIds.length === 0) return;
+
+    try {
+      const response = await fetch('/api/admin/tickets/bulk-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          ticketIds: selectedTicketIds,
+          data
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setSelectedTicketIds([]);
+        await fetchTickets();
+        // Show success message (you can use a toast library here)
+        alert(`Successfully ${action} ${selectedTicketIds.length} ticket(s)`);
+      } else {
+        alert(result.error || 'Bulk action failed');
+      }
+    } catch (error) {
+      console.error('Error performing bulk action:', error);
+      alert('Failed to perform bulk action');
+    }
+  };
+
+  // Fetch admins for bulk assign
+  const [admins, setAdmins] = useState([]);
+  useEffect(() => {
+    const fetchAdmins = async () => {
+      try {
+        const res = await fetch('/api/admin/users');
+        const data = await res.json();
+        if (res.ok && data.users) {
+          const adminUsers = data.users.filter(u => u.type === 'admin');
+          setAdmins(adminUsers);
+        }
+      } catch (error) {
+        console.error('Error fetching admins:', error);
+      }
+    };
+    fetchAdmins();
+  }, []);
 
   return (
     <>
@@ -302,6 +427,28 @@ export default function TicketsPage() {
           }}
           onAssign={handleAssignComplete}
           ticketNumber={ticketToAssign?.ticketNumber}
+        />
+
+        {/* Bulk Actions Widget */}
+        <BulkActionsWidget
+          selectedTicketIds={selectedTicketIds}
+          onClearSelection={() => setSelectedTicketIds([])}
+          onBulkAction={handleBulkAction}
+          userRole="admin"
+          onRefresh={fetchTickets}
+          availableTags={availableTags}
+          availableAgents={agents}
+          availableAdmins={admins}
+        />
+
+        {/* Export Modal */}
+        <ExportTicketsModal
+          isOpen={exportModalOpen}
+          onClose={() => setExportModalOpen(false)}
+          onExport={handleExportWithFilters}
+          selectedTicketIds={[]} // Empty for general export from list
+          availableAgents={agents}
+          availableAdmins={admins}
         />
       </AdminLayout>
     </>

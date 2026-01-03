@@ -104,10 +104,10 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Agent ID and reason are required for assignment' });
           }
 
-          // Verify target agent exists (include departmentId for auto-routing)
+          // Verify target agent exists (include departmentId and email for auto-routing and notifications)
           const targetAgent = await prisma.agent.findUnique({
             where: { id: data.agentId },
-            select: { id: true, name: true, departmentId: true }
+            select: { id: true, name: true, email: true, departmentId: true }
           });
 
           if (!targetAgent) {
@@ -158,6 +158,106 @@ export default async function handler(req, res) {
             } catch (socketError) {
               console.error('Error emitting ticket:assigned for bulk action:', socketError);
             }
+          }
+
+          // Send notification to assignee with list of tickets
+          try {
+            const { notifyBulkAssignment } = await import('../../../../lib/utils/notifications');
+            await notifyBulkAssignment(prisma, {
+              assigneeId: targetAgent.id,
+              assigneeType: 'agent',
+              assigneeName: targetAgent.name,
+              assigneeEmail: targetAgent.email,
+              ticketNumbers: ticketIds,
+              ticketCount: ticketIds.length,
+              reason: data.reason.trim(),
+              assignedBy: agent?.name || 'Agent'
+            });
+          } catch (notifError) {
+            console.error('Error sending bulk assignment notification:', notifError);
+          }
+
+          results = ticketIds.map(id => ({ ticketId: id, success: true }));
+          break;
+
+        case 'tags':
+          if (!data.tagIds || !Array.isArray(data.tagIds)) {
+            return res.status(400).json({ error: 'Tag IDs array is required' });
+          }
+
+          // Add tags to all tickets
+          for (const ticket of tickets) {
+            // Remove existing tags first if action is 'replace', otherwise add
+            if (data.action === 'replace') {
+              await prisma.conversationTag.deleteMany({
+                where: { conversationId: ticket.ticketNumber }
+              });
+            }
+
+            // Add new tags
+            for (const tagId of data.tagIds) {
+              // Check if tag already exists
+              const existingTag = await prisma.conversationTag.findFirst({
+                where: {
+                  conversationId: ticket.ticketNumber,
+                  tagId: tagId
+                }
+              });
+
+              if (!existingTag) {
+                await prisma.conversationTag.create({
+                  data: {
+                    conversationId: ticket.ticketNumber,
+                    tagId: tagId
+                  }
+                });
+              }
+            }
+
+            // Create activity log
+            await prisma.ticketActivity.create({
+              data: {
+                conversationId: ticket.ticketNumber,
+                activityType: 'tags_updated',
+                newValue: JSON.stringify(data.tagIds),
+                reason: data.reason || 'Bulk tag update',
+                performedBy: 'agent',
+                performedByName: agent?.name || 'Agent'
+              }
+            });
+          }
+
+          results = ticketIds.map(id => ({ ticketId: id, success: true }));
+          break;
+
+        case 'notes':
+          if (!data.content || !data.content.trim()) {
+            return res.status(400).json({ error: 'Note content is required' });
+          }
+
+          // Add internal notes to all tickets
+          for (const ticket of tickets) {
+            await prisma.ticketNote.create({
+              data: {
+                conversationId: ticket.ticketNumber,
+                content: data.content.trim(),
+                createdBy: agentId,
+                createdByName: agent?.name || 'Agent',
+                isInternal: true
+              }
+            });
+
+            // Create activity log
+            await prisma.ticketActivity.create({
+              data: {
+                conversationId: ticket.ticketNumber,
+                activityType: 'note_added',
+                newValue: 'Internal note added',
+                reason: 'Bulk note addition',
+                performedBy: 'agent',
+                performedByName: agent?.name || 'Agent'
+              }
+            });
           }
 
           results = ticketIds.map(id => ({ ticketId: id, success: true }));
