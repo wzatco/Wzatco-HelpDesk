@@ -87,7 +87,7 @@ export default function TicketsView({ userInfo, onBack }) {
       // Only log once per connection attempt to reduce spam
       if (!socket.connected) {
         console.warn('⚠️ Widget: Socket.IO connection error (will retry):', error.message || error);
-        setSocketConnected(false);
+      setSocketConnected(false);
       }
     });
 
