@@ -1,7 +1,0 @@
-{
-  "start": "node server.js",
-  "type": "nodejs",
-  "node_version": "20.x",
-  "custom_server": true
-}
-

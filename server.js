@@ -49,7 +49,7 @@ async function startServer() {
   try {
     await app.prepare();
     console.log('✅ Next.js app prepared successfully');
-    
+
     // Verify .next directory exists (build output)
     const nextDir = path.join(process.cwd(), '.next');
     if (!fs.existsSync(nextDir)) {
@@ -58,10 +58,59 @@ async function startServer() {
       console.log('✅ Next.js build directory found');
     }
 
-    const httpServer = createServer();
-    
-    // CRITICAL: Initialize Socket.IO BEFORE setting up the request handler
-    // This ensures Socket.IO can intercept its own paths
+    const httpServer = createServer((req, res) => {
+      const parsedUrl = parse(req.url, true);
+      
+      // Add error handling for unhandled errors
+      const originalEnd = res.end;
+      res.end = function(...args) {
+        // If response ended with error status, log it
+        if (res.statusCode >= 400 && !res.headersSent) {
+          console.error('❌ HTTP Error Response:', {
+            url: req.url,
+            method: req.method,
+            statusCode: res.statusCode,
+            statusMessage: res.statusMessage
+          });
+        }
+        return originalEnd.apply(this, args);
+      };
+      
+      // Wrap in try-catch for synchronous errors
+      try {
+        // Let Next.js handle all routes including static files, API routes, and pages
+        // This includes _app.js, _buildManifest.js, _ssgManifest.js, and chunk files
+        handle(req, res, parsedUrl);
+      } catch (error) {
+        // Catch synchronous errors
+        console.error('❌ Server Request Error:', {
+          url: req.url,
+          method: req.method,
+          error: error.message,
+          stack: error.stack
+        });
+        
+        if (!res.headersSent) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            success: false,
+            error: error.message || 'Internal server error',
+            errorType: error.name || 'Error',
+            timestamp: new Date().toISOString(),
+            _errorDetails: {
+              message: error.message,
+              type: error.name,
+              stack: process.env.SHOW_ERRORS_IN_BROWSER === 'true' || !isProduction ? error.stack : undefined,
+              route: req.url,
+              method: req.method
+            }
+          }));
+        }
+      }
+    });
+
+    // Initialize Socket.IO BEFORE attaching to server
     // Build CORS origin list for production
     const productionOrigins = [];
     if (process.env.CLIENT_URL) {
@@ -92,16 +141,12 @@ async function startServer() {
       allowUpgrades: true,
       perMessageDeflate: false, // Disable compression for better proxy compatibility
       httpCompression: false, // Disable HTTP compression for better proxy compatibility
-      connectTimeout: 45000,
     });
-    
-    // Store io globally for access in API routes
-    global.io = io;
-    
+
     // Initialize chat service
     const { initialize } = require('./lib/chat-service');
     initialize(io);
-    
+
     // Unified Presence System v2.0
     const presenceState = new Map();
 
@@ -129,108 +174,60 @@ async function startServer() {
         
         presenceState.set(ticketId, filtered);
 
-        // Notify others in the ticket
-        socket.to(`ticket:${ticketId}`).emit('presence:joined', {
-          user: { id: user.id, name: user.name, role: user.role }
-        });
+        const roomName = `ticket_presence:${ticketId}`;
+        socket.join(roomName);
 
-        // Join ticket room
-        socket.join(`ticket:${ticketId}`);
+        const activeViewers = filtered.map(v => v.user);
+        io.to(roomName).emit('presence:sync', { activeViewers });
+
+        console.log(`✅ PRESENCE: Synced ${activeViewers.length} viewers to ${roomName}`);
       });
 
       // Presence: Leave
       socket.on('presence:leave', ({ ticketId, user }) => {
         if (!ticketId || !user?.id) return;
 
-        console.log(`🔌 PRESENCE: ${user.name} (${user.role}) leaving ticket ${ticketId}`);
+        console.log(`👋 PRESENCE: ${user.name} leaving ticket ${ticketId}`);
 
         if (presenceState.has(ticketId)) {
           const viewers = presenceState.get(ticketId);
-          const filtered = viewers.filter(v => v.socketId !== socket.id);
-          presenceState.set(ticketId, filtered);
-        }
+          const filtered = viewers.filter(v => v.user.id !== user.id);
+          
+          if (filtered.length === 0) {
+            presenceState.delete(ticketId);
+          } else {
+            presenceState.set(ticketId, filtered);
+          }
 
-        socket.leave(`ticket:${ticketId}`);
-        socket.to(`ticket:${ticketId}`).emit('presence:left', {
-          user: { id: user.id, name: user.name, role: user.role }
-        });
+          const roomName = `ticket_presence:${ticketId}`;
+          socket.leave(roomName);
+
+          const activeViewers = filtered.map(v => v.user);
+          io.to(roomName).emit('presence:sync', { activeViewers });
+        }
       });
 
+      // Disconnect: Cleanup presence
       socket.on('disconnect', () => {
-        // Clean up presence on disconnect
         for (const [ticketId, viewers] of presenceState.entries()) {
+          const beforeCount = viewers.length;
           const filtered = viewers.filter(v => v.socketId !== socket.id);
-          if (filtered.length !== viewers.length) {
-            presenceState.set(ticketId, filtered);
-            socket.to(`ticket:${ticketId}`).emit('presence:left', {
-              user: { id: socket.user?.id }
-            });
+          
+          if (filtered.length !== beforeCount) {
+            const roomName = `ticket_presence:${ticketId}`;
+            
+            if (filtered.length === 0) {
+              presenceState.delete(ticketId);
+            } else {
+              presenceState.set(ticketId, filtered);
+            }
+
+            const activeViewers = filtered.map(v => v.user);
+            io.to(roomName).emit('presence:sync', { activeViewers });
+            console.log(`✅ PRESENCE: Cleaned up ${roomName}, now ${activeViewers.length} viewers`);
           }
         }
       });
-    });
-
-    // NOW set up the request handler - Socket.IO will have already set up its listeners
-    httpServer.on('request', (req, res) => {
-      const parsedUrl = parse(req.url, true);
-      
-      // Check if this is a Socket.IO request - if so, let Socket.IO handle it
-      // Socket.IO adds its own listeners, so we just need to not interfere
-      if (parsedUrl.pathname && (
-        parsedUrl.pathname.startsWith('/api/widget/socket') ||
-        parsedUrl.pathname.startsWith('/socket.io/') ||
-        parsedUrl.pathname.includes('socket.io')
-      )) {
-        // Let Socket.IO handle this - don't pass to Next.js
-        // Socket.IO's listeners will handle it
-        return;
-      }
-      
-      // Add error handling for unhandled errors
-      const originalEnd = res.end;
-      res.end = function(...args) {
-        // If response ended with error status, log it
-        if (res.statusCode >= 400 && !res.headersSent) {
-          console.error('❌ HTTP Error Response:', {
-            url: req.url,
-            method: req.method,
-            statusCode: res.statusCode,
-            statusMessage: res.statusMessage
-          });
-        }
-        return originalEnd.apply(this, args);
-      };
-      
-      // Wrap in try-catch for synchronous errors
-      try {
-        // Let Next.js handle all other routes including static files, API routes, and pages
-        // This includes _app.js, _buildManifest.js, _ssgManifest.js, and chunk files
-        handle(req, res, parsedUrl);
-      } catch (error) {
-        // Catch synchronous errors
-        console.error('❌ Server Request Error:', {
-          url: req.url,
-          method: req.method,
-          error: error.message,
-          stack: error.stack
-        });
-        
-        if (!res.headersSent) {
-          res.status(500).json({
-            success: false,
-            error: error.message || 'Internal server error',
-            errorType: error.name || 'Error',
-            timestamp: new Date().toISOString(),
-            _errorDetails: {
-              message: error.message,
-              type: error.name,
-              stack: process.env.SHOW_ERRORS_IN_BROWSER === 'true' || !isProduction ? error.stack : undefined,
-              route: req.url,
-              method: req.method
-            }
-          });
-        }
-      }
     });
 
     // Start listening on the detected port
