@@ -7,7 +7,7 @@
     "dev": "node --max-old-space-size=4096 server.js",
     "dev:next": "node --max-old-space-size=4096 node_modules/.bin/next dev -p 3000",
     "build": "prisma generate && next build && npm run postbuild",
-    "postbuild": "node -e \"const fs=require('fs'); if(fs.existsSync('.next/standalone/server.js')){fs.copyFileSync('server.js','.next/standalone/server.js.backup'); console.log('✅ Backed up Next.js standalone server'); fs.copyFileSync('server.js','server.js.custom'); console.log('✅ Preserved custom server.js');}\"",
+    "postbuild": "node -e \"const fs=require('fs'); const path=require('path'); if(fs.existsSync('.next/standalone')){const customServer=path.join(process.cwd(),'server.js'); const standaloneServer=path.join('.next','standalone','server.js'); if(fs.existsSync(standaloneServer)){fs.copyFileSync(standaloneServer,standaloneServer+'.nextjs-backup'); console.log('✅ Backed up Next.js standalone server');} fs.copyFileSync(customServer,standaloneServer); console.log('✅ Replaced with custom Socket.IO server'); console.log('📂 Location:',standaloneServer);}\"",
     "start": "node server.js",
     "start:next": "next start -p 3000",
     "postinstall": "prisma generate",
